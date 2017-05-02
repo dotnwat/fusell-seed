@@ -7,7 +7,7 @@ ifneq ($(shell uname -s),Darwin)
   LIBS += -lrt
 endif
 
-all: gassy gassy-cmd
+all: gassy
 
 CPPFLAGS += -DFUSE_USE_VERSION=30
 
@@ -29,9 +29,6 @@ dep_args = -MF $(dep_file) -MQ $@ -MMD -MP
 
 gassy: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
-
-gassy-cmd: gassy-cmd.cc
-	$(CXX) -Wall -o $@ $<
 
 dep_files_present := $(wildcard $(dep_files))
 ifneq ($(dep_files_present),)
