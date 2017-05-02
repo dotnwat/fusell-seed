@@ -9,8 +9,6 @@ RUN echo "===> Install the basics..." && \
       libfuse-dev \
       build-essential \
       libacl1-dev \
-      lua5.2 \
-      liblua5.2-dev \
       samtools \
       libexpat1-dev \
       libcurl4-openssl-dev \
