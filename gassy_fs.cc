@@ -5,6 +5,8 @@
 #include <iostream>
 #include <string>
 #include <time.h>
+#include <unistd.h>
+#include <linux/limits.h>
 #include "inode.h"
 
 #ifdef HAVE_LUA

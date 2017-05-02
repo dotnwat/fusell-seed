@@ -1,8 +1,8 @@
 #include "address_space.h"
 #include <cassert>
 #include <sys/mman.h>
-#include <gasnet.h>
 #include <iostream>
+#include <string.h>
 #include "common.h"
 
 class LocalNodeImpl : public Node {

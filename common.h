@@ -1,6 +1,5 @@
 #ifndef COMMON_H
 #define COMMON_H
-#include <gasnet.h>
 #include "address_space.h"
 #include "alloc.h"
 

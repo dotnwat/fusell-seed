@@ -1,5 +1,6 @@
 #include "inode.h"
 #include <cassert>
+#include <string.h>
 #include <fuse.h>
 #include "gassy_fs.h"
 #include "common.h"
