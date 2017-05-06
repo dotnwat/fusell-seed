@@ -13,9 +13,9 @@
 #include "inode_index.h"
 #include "address_space.h"
 
-class GassyFs {
+class FileSystem {
  public:
-  explicit GassyFs(AddressSpace *storage);
+  explicit FileSystem(AddressSpace *storage);
 
   int Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
       int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid);

@@ -7,11 +7,11 @@ ifneq ($(shell uname -s),Darwin)
   LIBS += -lrt
 endif
 
-all: gassy
+all: main
 
 CPPFLAGS += -DFUSE_USE_VERSION=30
 
-OBJS = gassy.o inode.o gassy_fs.o inode_index.o \
+OBJS = main.o inode.o filesystem.o inode_index.o \
 	   local_address_space.o
 
 dep_files := $(foreach f, $(OBJS), $(dir f).depend/$(notdir $f).d)
@@ -27,7 +27,7 @@ dep_args = -MF $(dep_file) -MQ $@ -MMD -MP
 %.o: %.cc $(missing_dep_dirs)
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $*.o -c $(dep_args) $<
 
-gassy: $(OBJS)
+main: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 
 dep_files_present := $(wildcard $(dep_files))
@@ -36,4 +36,4 @@ include $(dep_files_present)
 endif
 
 clean:
-	rm -rf $(dep_dirs) $(OBJS) gassy
+	rm -rf $(dep_dirs) $(OBJS) main

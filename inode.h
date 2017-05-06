@@ -8,14 +8,14 @@
 #include <fuse_lowlevel.h>
 #include "common.h"
 
-class GassyFs;
+class FileSystem;
 
 class Inode {
  public:
   typedef std::shared_ptr<Inode> Ptr;
 
   Inode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-      mode_t mode, GassyFs *fs);
+      mode_t mode, FileSystem *fs);
   virtual ~Inode();
 
   void set_ino(fuse_ino_t ino);
@@ -33,7 +33,7 @@ class Inode {
  private:
   bool ino_set_;
   fuse_ino_t ino_;
-  GassyFs *fs_;
+  FileSystem *fs_;
 };
 
 // TODO: specialize for regular file
@@ -43,7 +43,7 @@ class DirInode : public Inode {
   typedef std::shared_ptr<DirInode> Ptr;
   typedef std::map<std::string, Inode::Ptr> dir_t;
   DirInode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-      mode_t mode, GassyFs *fs) :
+      mode_t mode, FileSystem *fs) :
     Inode(time, uid, gid, blksize, mode, fs) {
       i_st.st_nlink = 2;
       i_st.st_mode = S_IFDIR | mode;
@@ -56,7 +56,7 @@ class SymlinkInode : public Inode {
  public:
   typedef std::shared_ptr<SymlinkInode> Ptr;
   SymlinkInode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-      const std::string& link, GassyFs *fs) :
+      const std::string& link, FileSystem *fs) :
     Inode(time, uid, gid, blksize, 0, fs) {
       i_st.st_mode = S_IFLNK;
       this->link = link;

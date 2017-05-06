@@ -1,4 +1,5 @@
-#include "gassy_fs.h"
+#include "filesystem.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -34,7 +35,7 @@ static inline std::time_t time_now(void)
 }
 #endif
 
-GassyFs::GassyFs(AddressSpace *storage) :
+FileSystem::FileSystem(AddressSpace *storage) :
   next_ino_(FUSE_ROOT_ID + 1), storage_(storage)
 {
   std::time_t now = time_now();
@@ -67,7 +68,7 @@ GassyFs::GassyFs(AddressSpace *storage) :
   stat.f_bavail = stat.f_blocks;
 }
 
-int GassyFs::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -103,7 +104,7 @@ int GassyFs::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
   return 0;
 }
 
-int GassyFs::GetAttr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid)
+int FileSystem::GetAttr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -114,7 +115,7 @@ int GassyFs::GetAttr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid)
   return 0;
 }
 
-int GassyFs::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid, gid_t gid)
+int FileSystem::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -150,7 +151,7 @@ int GassyFs::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid, g
   return 0;
 }
 
-int GassyFs::Lookup(fuse_ino_t parent_ino, const std::string& name, struct stat *st)
+int FileSystem::Lookup(fuse_ino_t parent_ino, const std::string& name, struct stat *st)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -170,7 +171,7 @@ int GassyFs::Lookup(fuse_ino_t parent_ino, const std::string& name, struct stat 
   return 0;
 }
 
-int GassyFs::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid_t gid)
+int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid_t gid)
 {
   int mode = 0;
   if ((flags & O_ACCMODE) == O_RDONLY)
@@ -206,13 +207,13 @@ int GassyFs::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid_t 
   return 0;
 }
 
-void GassyFs::Release(fuse_ino_t ino, FileHandle *fh)
+void FileSystem::Release(fuse_ino_t ino, FileHandle *fh)
 {
   assert(fh);
   delete fh;
 }
 
-void GassyFs::Forget(fuse_ino_t ino, long unsigned nlookup)
+void FileSystem::Forget(fuse_ino_t ino, long unsigned nlookup)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -220,7 +221,7 @@ void GassyFs::Forget(fuse_ino_t ino, long unsigned nlookup)
   ino_refs_.put(ino, nlookup);
 }
 
-ssize_t GassyFs::Write(FileHandle *fh, off_t offset, size_t size, const char *buf)
+ssize_t FileSystem::Write(FileHandle *fh, off_t offset, size_t size, const char *buf)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -233,7 +234,7 @@ ssize_t GassyFs::Write(FileHandle *fh, off_t offset, size_t size, const char *bu
 }
 
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
-ssize_t GassyFs::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off)
+ssize_t FileSystem::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -271,7 +272,7 @@ ssize_t GassyFs::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off)
 }
 #endif
 
-ssize_t GassyFs::Read(FileHandle *fh, off_t offset,
+ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
     size_t size, char *buf)
 {
   std::lock_guard<std::mutex> l(mutex_);
@@ -368,7 +369,7 @@ ssize_t GassyFs::Read(FileHandle *fh, off_t offset,
   return new_size;
 }
 
-int GassyFs::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     struct stat *st, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -403,7 +404,7 @@ int GassyFs::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
   return 0;
 }
 
-int GassyFs::Rmdir(fuse_ino_t parent_ino, const std::string& name,
+int FileSystem::Rmdir(fuse_ino_t parent_ino, const std::string& name,
     uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
@@ -437,7 +438,7 @@ int GassyFs::Rmdir(fuse_ino_t parent_ino, const std::string& name,
   return 0;
 }
 
-int GassyFs::Rename(fuse_ino_t parent_ino, const std::string& name,
+int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
     fuse_ino_t newparent_ino, const std::string& newname,
     uid_t uid, gid_t gid)
 {
@@ -547,7 +548,7 @@ int GassyFs::Rename(fuse_ino_t parent_ino, const std::string& name,
   return 0;
 }
 
-int GassyFs::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
+int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
     int to_set, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
@@ -655,7 +656,7 @@ int GassyFs::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
   return 0;
 }
 
-int GassyFs::Symlink(const std::string& link, fuse_ino_t parent_ino,
+int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
     const std::string& name, struct stat *st, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -689,7 +690,7 @@ int GassyFs::Symlink(const std::string& link, fuse_ino_t parent_ino,
   return 0;
 }
 
-ssize_t GassyFs::Readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t uid, gid_t gid)
+ssize_t FileSystem::Readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -705,7 +706,7 @@ ssize_t GassyFs::Readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t uid, 
   return link_len;
 }
 
-int GassyFs::Statfs(fuse_ino_t ino, struct statvfs *stbuf)
+int FileSystem::Statfs(fuse_ino_t ino, struct statvfs *stbuf)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -722,7 +723,7 @@ int GassyFs::Statfs(fuse_ino_t ino, struct statvfs *stbuf)
   return 0;
 }
 
-int GassyFs::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string& newname,
+int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string& newname,
     struct stat *st, uid_t uid, gid_t gid)
 {
   if (newname.length() > NAME_MAX)
@@ -760,7 +761,7 @@ int GassyFs::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string& n
   return 0;
 }
 
-int GassyFs::Access(Inode::Ptr in, int mask, uid_t uid, gid_t gid)
+int FileSystem::Access(Inode::Ptr in, int mask, uid_t uid, gid_t gid)
 {
   if (mask == F_OK)
     return 0;
@@ -821,7 +822,7 @@ int GassyFs::Access(Inode::Ptr in, int mask, uid_t uid, gid_t gid)
 }
 
 
-int GassyFs::Access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid)
+int FileSystem::Access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -837,7 +838,7 @@ int GassyFs::Access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid)
  * TODO: add checks that enforce non-use of special files. Note that this
  * routine can also create regular files.
  */
-int GassyFs::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     dev_t rdev, struct stat *st, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -876,7 +877,7 @@ int GassyFs::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
   return 0;
 }
 
-int GassyFs::OpenDir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid)
+int FileSystem::OpenDir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -898,7 +899,7 @@ int GassyFs::OpenDir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid)
  * we just do an in-order traversal of the directory and return the Nth
  * item.
  */
-ssize_t GassyFs::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
+ssize_t FileSystem::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
     size_t bufsize, off_t off)
 {
   std::lock_guard<std::mutex> l(mutex_);
@@ -962,15 +963,15 @@ ssize_t GassyFs::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
   return pos;
 }
 
-void GassyFs::ReleaseDir(fuse_ino_t ino) {}
+void FileSystem::ReleaseDir(fuse_ino_t ino) {}
 
-void GassyFs::free_space(Extent *extent)
+void FileSystem::free_space(Extent *extent)
 {
   extent->node->alloc->free(extent->addr, extent->size);
   avail_bytes_ += extent->size;
 }
 
-int GassyFs::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
+int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
 {
   // easy: nothing to do
   if (in->i_st.st_size == newsize) {
@@ -1090,7 +1091,7 @@ int GassyFs::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
  * Allocate storage space for a file. The space should be available at file
  * offset @offset, and be no larger than @size bytes.
  */
-int GassyFs::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
+int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
     off_t offset, size_t size, bool upper_bound)
 {
 #if 0
@@ -1152,7 +1153,7 @@ class IOFinisher {
   Node::group_io_handle_t io_handle_;
 };
 
-ssize_t GassyFs::Write(Inode::Ptr in, off_t offset, size_t size, const char *buf)
+ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *buf)
 {
 #if 0
   std::cout << "write: offset=" << offset << " size=" << size << std::endl;
