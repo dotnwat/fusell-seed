@@ -45,7 +45,7 @@ class LocalNodeImpl : public Node {
   uintptr_t size_;
 };
 
-int LocalAddressSpace::init(struct gassyfs_opts *opts)
+int LocalAddressSpace::init(struct filesystem_opts *opts)
 {
   const size_t size = opts->heap_size << 20;
 
@@ -58,8 +58,6 @@ int LocalAddressSpace::init(struct gassyfs_opts *opts)
   LocalNodeImpl *node = new LocalNodeImpl(data, size);
 
   nodes_.push_back(node);
-
-  opts->rank0_alloc = 1;
 
   return 0;
 }

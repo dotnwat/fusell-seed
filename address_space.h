@@ -41,7 +41,7 @@ class AddressSpace {
 
 class LocalAddressSpace : public AddressSpace {
  public:
-  int init(struct gassyfs_opts *opts);
+  int init(struct filesystem_opts *opts);
 
   std::vector<Node*>& nodes() {
     return nodes_;

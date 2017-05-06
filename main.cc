@@ -428,11 +428,9 @@ enum {
   KEY_HELP,
 };
 
-#define GASSYFS_OPT(t, p, v) { t, offsetof(struct gassyfs_opts, p), v }
+#define GASSYFS_OPT(t, p, v) { t, offsetof(struct filesystem_opts, p), v }
 
 static struct fuse_opt gassyfs_fuse_opts[] = {
-  GASSYFS_OPT("rank0_alloc",     rank0_alloc, 1),
-  GASSYFS_OPT("local_mode",      local_mode, 1),
   GASSYFS_OPT("heap_size=%u",    heap_size, 0),
   FUSE_OPT_KEY("-h",             KEY_HELP),
   FUSE_OPT_KEY("--help",         KEY_HELP),
@@ -443,8 +441,6 @@ static void usage(const char *progname)
 {
   printf(
 "gassyfs options:\n"
-"    -o rank0_alloc          rank 0 should contribute heap\n"
-"    -o local_mode           don't use GASNet (implies -o rank0_alloc)\n"
 "    -o heap_size=N          per-node heap size\n"
 );
 }
@@ -468,11 +464,9 @@ static int gassyfs_opt_proc(void *data, const char *arg, int key,
 
 int main(int argc, char *argv[])
 {
-  struct gassyfs_opts opts;
+  struct filesystem_opts opts;
 
   // option defaults
-  opts.rank0_alloc = 0;
-  opts.local_mode  = 0;
   opts.heap_size   = 512;
 
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -483,14 +477,11 @@ int main(int argc, char *argv[])
   }
 
   assert(opts.heap_size > 0);
-  assert(opts.local_mode);
 
   auto storage = new LocalAddressSpace;
   int ret = storage->init(&opts);
   assert(ret == 0);
 
-  std::cout << "Local mode:            " << (opts.local_mode ? "yes" : "no") << std::endl;
-  std::cout << "Rank 0 allocation:     " << (opts.rank0_alloc ? "yes" : "no") << std::endl;
   std::cout << "Heap size:             " << opts.heap_size << std::endl;
 
   struct fuse_chan *ch;
