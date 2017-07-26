@@ -18,16 +18,17 @@ source /etc/os-release
 case $ID in
   debian|ubuntu)
     $SUDO apt-get update -qq
-    $SUDO apt-get install -qq build-essential pkg-config libfuse-dev
+    $SUDO apt-get install -qq build-essential pkg-config \
+        libfuse-dev libacl1-dev
 	;;
-
 
   centos|fedora)
     yumdnf="yum"
     if command -v dnf > /dev/null; then
       yumdnf="dnf"
     fi
-    $SUDO $yumdnf install -y fuse-devel gcc-c++ make pkgconfig
+    $SUDO $yumdnf install -y fuse-devel gcc-c++ make pkgconfig \
+        libacl-devel perl-Test-Harness
 	;;
 
   *)

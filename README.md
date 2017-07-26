@@ -42,3 +42,12 @@ run prior to each release:
 | Fedora 23        | [![status](https://badges.herokuapp.com/travis/noahdesu/fuse-boilerplate?env=DOCKER_IMAGE=fedora:23&label=fedora:23)](https://travis-ci.org/noahdesu/fuse-boilerplate) |
 | Fedora 24        | [![status](https://badges.herokuapp.com/travis/noahdesu/fuse-boilerplate?env=DOCKER_IMAGE=fedora:24&label=fedora:24)](https://travis-ci.org/noahdesu/fuse-boilerplate) |
 | Fedora 25        | [![status](https://badges.herokuapp.com/travis/noahdesu/fuse-boilerplate?env=DOCKER_IMAGE=fedora:25&label=fedora:25)](https://travis-ci.org/noahdesu/fuse-boilerplate) |
+
+# Notes
+
+[nwatkins@kyoto fuse-boilerplate]$ ./main mount -o fsname=fusell -o allow_other -o atomic_o_trunc
+Heap size:             512
+write interface: write_buf
+fusermount: option allow_other only allowed if 'user_allow_other' is set in
+/etc/fuse.conf
+
