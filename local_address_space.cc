@@ -47,7 +47,7 @@ class LocalNodeImpl : public Node {
 
 int LocalAddressSpace::init(struct filesystem_opts *opts)
 {
-  const size_t size = opts->heap_size << 20;
+  const size_t size = opts->size;
 
   void *data = mmap(NULL, size, PROT_READ|PROT_WRITE,
       MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);

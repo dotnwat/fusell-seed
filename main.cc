@@ -11,7 +11,6 @@
 #include <fuse_lowlevel.h>
 
 #include "filesystem.h"
-#include "gassyfs_ioctl.h"
 
 static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
     mode_t mode, struct fuse_file_info *fi)
@@ -20,26 +19,27 @@ static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
-  memset(&fe, 0, sizeof(fe));
+  std::memset(&fe, 0, sizeof(fe));
 
   FileHandle *fh;
   int ret = fs->Create(parent, name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
   if (ret == 0) {
-    fi->fh = (long)fh;
+    fi->fh = reinterpret_cast<uint64_t>(fh);
     fe.ino = fe.attr.st_ino;
     fe.generation = 0;
     fe.entry_timeout = 1.0;
     fuse_reply_create(req, &fe, fi);
-  } else
+  } else {
     fuse_reply_err(req, -ret);
+  }
 }
 
 static void ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
-  FileHandle *fh = (FileHandle*)fi->fh;
+  auto fh = reinterpret_cast<FileHandle*>(fi->fh);
 
-  fs->Release(ino, fh); // will delete fh
+  fs->Release(ino, fh);
   fuse_reply_err(req, 0);
 }
 
@@ -80,8 +80,8 @@ static void ll_getattr(fuse_req_t req, fuse_ino_t ino,
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  struct stat st;
 
+  struct stat st;
   int ret = fs->GetAttr(ino, &st, ctx->uid, ctx->gid);
   if (ret == 0)
     fuse_reply_attr(req, &st, ret);
@@ -94,15 +94,16 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   struct fuse_entry_param fe;
-  memset(&fe, 0, sizeof(fe));
+  std::memset(&fe, 0, sizeof(fe));
 
   int ret = fs->Lookup(parent, name, &fe.attr);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fe.generation = 0;
     fuse_reply_entry(req, &fe);
-  } else
+  } else {
     fuse_reply_err(req, -ret);
+  }
 }
 
 static void ll_opendir(fuse_req_t req, fuse_ino_t ino,
@@ -124,17 +125,15 @@ static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
-  char *buf = new char[size];
+  auto buf = std::unique_ptr<char[]>(new char[size]);
 
-  ssize_t ret = fs->ReadDir(req, ino, buf, size, off);
+  ssize_t ret = fs->ReadDir(req, ino, buf.get(), size, off);
   if (ret >= 0) {
-    fuse_reply_buf(req, buf, (size_t)ret);
+    fuse_reply_buf(req, buf.get(), (size_t)ret);
   } else {
     int r = (int)ret;
     fuse_reply_err(req, -r);
   }
-
-  delete [] buf;
 }
 
 static void ll_releasedir(fuse_req_t req, fuse_ino_t ino,
@@ -152,16 +151,18 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino,
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  FileHandle *fh;
 
+  // new files are handled by ll_create
   assert(!(fi->flags & O_CREAT));
 
+  FileHandle *fh;
   int ret = fs->Open(ino, fi->flags, &fh, ctx->uid, ctx->gid);
   if (ret == 0) {
-    fi->fh = (long)fh;
+    fi->fh = reinterpret_cast<uint64_t>(fh);
     fuse_reply_open(req, fi);
-  } else
+  } else {
     fuse_reply_err(req, -ret);
+  }
 }
 
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
@@ -170,7 +171,7 @@ static void ll_write_buf(fuse_req_t req, fuse_ino_t ino,
     struct fuse_file_info *fi)
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
-  FileHandle *fh = (FileHandle*)fi->fh;
+  auto fh = reinterpret_cast<FileHandle*>(fi->fh);
 
   ssize_t ret = fs->WriteBuf(fh, bufv, off);
   if (ret >= 0)
@@ -183,7 +184,7 @@ static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
     size_t size, off_t off, struct fuse_file_info *fi)
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
-  FileHandle *fh = (FileHandle*)fi->fh;
+  auto fh = reinterpret_cast<FileHandle*>(fi->fh);
 
   ssize_t ret = fs->Write(fh, off, size, buf);
   if (ret >= 0)
@@ -197,12 +198,8 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     struct fuse_file_info *fi)
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
-  FileHandle *fh = (FileHandle*)fi->fh;
+  auto fh = reinterpret_cast<FileHandle*>(fi->fh);
 
-  /*
-   * TODO: if this becomes a performance issue, then we can use a memory pool
-   * to keep a bunch of buffers always allocated and ready to use.
-   */
   auto buf = std::unique_ptr<char[]>(new char[size]);
 
   ssize_t ret = fs->Read(fh, off, size, buf.get());
@@ -219,7 +216,7 @@ static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
-  memset(&fe, 0, sizeof(fe));
+  std::memset(&fe, 0, sizeof(fe));
 
   int ret = fs->Mkdir(parent, name, mode, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
@@ -227,8 +224,9 @@ static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     fe.generation = 0;
     fe.entry_timeout = 1.0;
     fuse_reply_entry(req, &fe);
-  } else
+  } else {
     fuse_reply_err(req, -ret);
+  }
 }
 
 static void ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
@@ -255,11 +253,8 @@ static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     int to_set, struct fuse_file_info *fi)
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
+  auto fh = fi ? reinterpret_cast<FileHandle*>(fi->fh) : nullptr;
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-
-  FileHandle *fh = NULL;
-  if (fi)
-    fh = (FileHandle*)fi->fh;
 
   int ret = fs->SetAttr(ino, fh, attr, to_set, ctx->uid, ctx->gid);
   if (ret == 0)
@@ -291,14 +286,15 @@ static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
-  memset(&fe, 0, sizeof(fe));
+  std::memset(&fe, 0, sizeof(fe));
 
   int ret = fs->Symlink(link, parent, name, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
-  } else
+  } else {
     fuse_reply_err(req, -ret);
+  }
 }
 
 static void ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
@@ -318,7 +314,7 @@ static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   struct statvfs stbuf;
-  memset(&stbuf, 0, sizeof(stbuf));
+  std::memset(&stbuf, 0, sizeof(stbuf));
 
   int ret = fs->Statfs(ino, &stbuf);
   if (ret == 0)
@@ -334,14 +330,15 @@ static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
-  memset(&fe, 0, sizeof(fe));
+  std::memset(&fe, 0, sizeof(fe));
 
   int ret = fs->Link(ino, newparent, newname, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
-  } else
+  } else {
     fuse_reply_err(req, -ret);
+  }
 }
 
 static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
@@ -360,43 +357,22 @@ static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
-  memset(&fe, 0, sizeof(fe));
+  std::memset(&fe, 0, sizeof(fe));
 
   int ret = fs->Mknod(parent, name, mode, rdev, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
-  } else
+  } else {
     fuse_reply_err(req, -ret);
+  }
 }
 
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
     off_t offset, off_t length, struct fuse_file_info *fi)
 {
-  // not implemented, but return OK for now.
   fuse_reply_err(req, 0);
-}
-#endif
-
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-static void ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
-    struct fuse_file_info *fi, unsigned flags, const void *in_buf,
-    size_t in_bufsz, size_t out_bufsz)
-{
-  switch (cmd) {
-    case GASSY_IOC_PRINT_STRING:
-      {
-        struct gassy_string s;
-        memcpy(&s, in_buf, sizeof(s));
-        printf("got string: %s\n", s.string);
-        fuse_reply_ioctl(req, 0, NULL, 0);
-      }
-      break;
-
-    default:
-      fuse_reply_err(req, EINVAL);
-  }
 }
 #endif
 
@@ -404,10 +380,10 @@ enum {
   KEY_HELP,
 };
 
-#define GASSYFS_OPT(t, p, v) { t, offsetof(struct filesystem_opts, p), v }
+#define FS_OPT(t, p, v) { t, offsetof(struct filesystem_opts, p), v }
 
-static struct fuse_opt gassyfs_fuse_opts[] = {
-  GASSYFS_OPT("heap_size=%u",    heap_size, 0),
+static struct fuse_opt fs_fuse_opts[] = {
+  FS_OPT("size=%u",              size, 0),
   FUSE_OPT_KEY("-h",             KEY_HELP),
   FUSE_OPT_KEY("--help",         KEY_HELP),
   FUSE_OPT_END
@@ -416,12 +392,12 @@ static struct fuse_opt gassyfs_fuse_opts[] = {
 static void usage(const char *progname)
 {
   printf(
-"gassyfs options:\n"
-"    -o heap_size=N          per-node heap size\n"
+"file system options:\n"
+"    -o size=N          max file system size (bytes)\n"
 );
 }
 
-static int gassyfs_opt_proc(void *data, const char *arg, int key,
+static int fs_opt_proc(void *data, const char *arg, int key,
     struct fuse_args *outargs)
 {
   switch (key) {
@@ -443,22 +419,21 @@ int main(int argc, char *argv[])
   struct filesystem_opts opts;
 
   // option defaults
-  opts.heap_size   = 512;
+  opts.size   = 512;
 
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-  if (fuse_opt_parse(&args, &opts, gassyfs_fuse_opts,
-        gassyfs_opt_proc) == -1) {
+  if (fuse_opt_parse(&args, &opts, fs_fuse_opts, fs_opt_proc) == -1) {
     exit(1);
   }
 
-  assert(opts.heap_size > 0);
+  assert(opts.size > 0);
 
   auto storage = new LocalAddressSpace;
   int ret = storage->init(&opts);
   assert(ret == 0);
 
-  std::cout << "Heap size:             " << opts.heap_size << std::endl;
+  std::cout << "Heap size:             " << opts.size << std::endl;
 
   struct fuse_chan *ch;
   char *mountpoint;
@@ -466,7 +441,7 @@ int main(int argc, char *argv[])
 
   // Operation registry
   struct fuse_lowlevel_ops ll_oper;
-  memset(&ll_oper, 0, sizeof(ll_oper));
+  std::memset(&ll_oper, 0, sizeof(ll_oper));
   ll_oper.lookup      = ll_lookup;
   ll_oper.getattr     = ll_getattr;
   ll_oper.opendir     = ll_opendir;
@@ -499,9 +474,6 @@ int main(int argc, char *argv[])
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
   ll_oper.forget_multi = ll_forget_multi;
   ll_oper.fallocate   = ll_fallocate;
-#endif
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-  ll_oper.ioctl       = ll_ioctl;
 #endif
 
   /*
