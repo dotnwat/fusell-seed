@@ -1,9 +1,10 @@
 # Low-level FUSE file system boilerplate
 
 This project is a barebones implementation of an in-memory FUSE file system
-that uses the low-level FUSE interface. It passes a very large percentage of
-the POSIX compliance suite, is tested regularly with numerous workloads, and
-can serve as a good starting point for your next file system project.
+that uses the low-level FUSE interface. It passes a large percentage of the
+POSIX compliance test suite, is regularly stress tested with numerous
+workloads, and can serve as a good starting point for your next file system
+project.
 
 Many FUSE file systems found out in the wild use the high-level FUSE interface
 that operates on file paths. In contrast to the path-based interface, the
