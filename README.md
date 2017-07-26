@@ -1,6 +1,13 @@
-# fuse_ll boilerplate
+# low-level FUSE file system boilerplate
 
-Boilerplate FUSE file system using the low-level interface.
+This project is a barebones implementation of an in-memory FUSE file system that
+uses the low-level interface that operates on i-nodes, rather than file paths.
+
+Many FUSE file systems found out in the wild use the high-level FUSE interface
+that operates on file paths. In contrast to the path-based interface, the
+low-level interface in FUSE operates on i-nodes, and offers a lot of flexibility.
+However, there seems to be relatively few examples of how to build a file system
+with this more advanced interface.
 
 # Testing
 
