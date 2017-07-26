@@ -1,43 +1,28 @@
-/*
- *
- */
 #define FUSE_USE_VERSION 30
 
-#include <map>
-#include <unordered_map>
-#include <string>
-#include <deque>
-#include <vector>
-#include <iostream>
-#include <mutex>
-#include <cstring>
 #include <cassert>
+#include <cstring>
+#include <iostream>
+
+#include <linux/limits.h>
 
 #include <fuse.h>
 #include <fuse_opt.h>
 #include <fuse_lowlevel.h>
 
-#include "common.h"
-#include "inode.h"
 #include "filesystem.h"
-#include "address_space.h"
 #include "gassyfs_ioctl.h"
 
-#include <linux/limits.h>
-
-/*
- *
- */
 static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
     mode_t mode, struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  FileHandle *fh;
 
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
 
+  FileHandle *fh;
   int ret = fs->Create(parent, name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
   if (ret == 0) {
     fi->fh = (long)fh;
@@ -51,7 +36,7 @@ static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 static void ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   FileHandle *fh = (FileHandle*)fi->fh;
 
   fs->Release(ino, fh); // will delete fh
@@ -60,7 +45,7 @@ static void ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 
 static void ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   int ret = fs->Unlink(parent, name, ctx->uid, ctx->gid);
@@ -69,7 +54,7 @@ static void ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 static void ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   fs->Forget(ino, nlookup);
   fuse_reply_none(req);
@@ -79,7 +64,7 @@ static void ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 void ll_forget_multi(fuse_req_t req, size_t count,
     struct fuse_forget_data *forgets)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   for (size_t i = 0; i < count; i++) {
     const struct fuse_forget_data *f = forgets + i;
@@ -93,7 +78,7 @@ void ll_forget_multi(fuse_req_t req, size_t count,
 static void ll_getattr(fuse_req_t req, fuse_ino_t ino,
     struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct stat st;
 
@@ -106,7 +91,7 @@ static void ll_getattr(fuse_req_t req, fuse_ino_t ino,
 
 static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   struct fuse_entry_param fe;
   memset(&fe, 0, sizeof(fe));
@@ -120,13 +105,10 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     fuse_reply_err(req, -ret);
 }
 
-/*
- *
- */
 static void ll_opendir(fuse_req_t req, fuse_ino_t ino,
     struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   int ret = fs->OpenDir(ino, fi->flags, ctx->uid, ctx->gid);
@@ -137,13 +119,10 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino,
   }
 }
 
-/*
- *
- */
 static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     off_t off, struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   char *buf = new char[size];
 
@@ -158,13 +137,10 @@ static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
   delete [] buf;
 }
 
-/*
- *
- */
 static void ll_releasedir(fuse_req_t req, fuse_ino_t ino,
     struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   fs->ReleaseDir(ino);
   fuse_reply_err(req, 0);
@@ -174,7 +150,7 @@ static void ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 static void ll_open(fuse_req_t req, fuse_ino_t ino,
     struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   FileHandle *fh;
 
@@ -193,7 +169,7 @@ static void ll_write_buf(fuse_req_t req, fuse_ino_t ino,
     struct fuse_bufvec *bufv, off_t off,
     struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   FileHandle *fh = (FileHandle*)fi->fh;
 
   ssize_t ret = fs->WriteBuf(fh, bufv, off);
@@ -206,7 +182,7 @@ static void ll_write_buf(fuse_req_t req, fuse_ino_t ino,
 static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
     size_t size, off_t off, struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   FileHandle *fh = (FileHandle*)fi->fh;
 
   ssize_t ret = fs->Write(fh, off, size, buf);
@@ -220,7 +196,7 @@ static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   FileHandle *fh = (FileHandle*)fi->fh;
 
   /*
@@ -239,7 +215,7 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
     mode_t mode)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
@@ -257,7 +233,7 @@ static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 static void ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   int ret = fs->Rmdir(parent, name, ctx->uid, ctx->gid);
@@ -267,7 +243,7 @@ static void ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
 static void ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
     fuse_ino_t newparent, const char *newname)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   int ret = fs->Rename(parent, name, newparent, newname,
@@ -278,7 +254,7 @@ static void ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     int to_set, struct fuse_file_info *fi)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   FileHandle *fh = NULL;
@@ -294,7 +270,7 @@ static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 
 static void ll_readlink(fuse_req_t req, fuse_ino_t ino)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   char path[PATH_MAX + 1];
 
@@ -311,7 +287,7 @@ static void ll_readlink(fuse_req_t req, fuse_ino_t ino)
 static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
     const char *name)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
@@ -339,7 +315,7 @@ static void ll_fsyncdir(fuse_req_t req, fuse_ino_t ino, int datasync,
 
 static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
   struct statvfs stbuf;
   memset(&stbuf, 0, sizeof(stbuf));
@@ -354,7 +330,7 @@ static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
 static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
     const char *newname)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
@@ -370,7 +346,7 @@ static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
 
 static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   int ret = fs->Access(ino, mask, ctx->uid, ctx->gid);
@@ -380,7 +356,7 @@ static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
     mode_t mode, dev_t rdev)
 {
-  FileSystem *fs = (FileSystem*)fuse_req_userdata(req);
+  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct fuse_entry_param fe;
