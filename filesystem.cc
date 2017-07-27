@@ -5,15 +5,19 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+
+#if defined(__linux__)
+# include <linux/limits.h>
+#elif defined(__APPLE__)
+# include <sys/syslimits.h>
+# include <mach/clock.h>
+# include <mach/mach.h>
+#endif
+
 #include <time.h>
 #include <unistd.h>
-#include <linux/limits.h>
-#include "inode.h"
 
-#ifdef __MACH__
-#include <mach/clock.h>
-#include <mach/mach.h>
-#endif
+#include "inode.h"
 
 #ifdef __MACH__
 static inline std::time_t time_now(void)
