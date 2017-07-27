@@ -32,14 +32,6 @@ class LocalNodeImpl : public Node {
     memcpy(abs_dst, src, len);
   }
 
-  void aio_read(group_io_handle_t handle, void *dst, void *src, size_t len) {
-    return read(dst, src, len);
-  }
-
-  void aio_write(group_io_handle_t handle, void *dst, void *src, size_t len) {
-    return write(dst, src, len);
-  }
-
  private:
   char *base_;
   uintptr_t size_;
@@ -60,16 +52,4 @@ int LocalAddressSpace::init(struct filesystem_opts *opts)
   nodes_.push_back(node);
 
   return 0;
-}
-
-/*
- * local mode aio becomes synchronous (i.e. memcpy)
- */
-Node::group_io_handle_t LocalAddressSpace::group_io_start()
-{
-  return NULL;
-}
-
-void LocalAddressSpace::group_io_wait(Node::group_io_handle_t handle)
-{
 }

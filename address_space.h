@@ -12,19 +12,12 @@ struct gassyfs_opts;
  */
 class Node {
  public:
-  typedef void* group_io_handle_t;
-
   // valid address space: [0, size)
   virtual size_t size() = 0;
 
   // synchronous
   virtual void read(void *dst, void *src, size_t len) = 0;
   virtual void write(void *dst, void *src, size_t len) = 0;
-
-  virtual void aio_read(group_io_handle_t handle, void *dst,
-      void *src, size_t len) = 0;
-  virtual void aio_write(group_io_handle_t handle, void *dst,
-      void *src, size_t len) = 0;
 };
 
 /*
@@ -33,10 +26,6 @@ class Node {
 class AddressSpace {
  public:
   virtual std::vector<Node*>& nodes() = 0;
-
-  // aio
-  virtual Node::group_io_handle_t group_io_start() = 0;
-  virtual void group_io_wait(Node::group_io_handle_t handle) = 0;
 };
 
 class LocalAddressSpace : public AddressSpace {
@@ -46,9 +35,6 @@ class LocalAddressSpace : public AddressSpace {
   std::vector<Node*>& nodes() {
     return nodes_;
   }
-
-  Node::group_io_handle_t group_io_start();
-  void group_io_wait(Node::group_io_handle_t handle);
 
  private:
   std::vector<Node*> nodes_;
