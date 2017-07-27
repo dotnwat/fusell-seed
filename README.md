@@ -14,14 +14,13 @@ low-level interface in FUSE operates on i-nodes, and offers a lot of flexibility
 However, there seems to be relatively few examples of how to build a file system
 with this more advanced interface.
 
-# File System Testing
+# Testing Process
 
 The testing we perform focuses on support across many distributions,
 compliance to the POSIX standard, and stress testing with many workloads.
-
 Continuous integration builds and mounts the file system for a variety of OS
-distributions (see below for test matrix). In addition, the continuous
-integration process runs the Tuxera POSIX test suite on Ubuntu Trusty.
+distributions. In addition, the continuous integration process runs the Tuxera
+POSIX test suite on Ubuntu Trusty.
 
 A broader set of tests are periodically run (e.g. before new releases) that
 exercise the file system using a variety of real-world workloads.
@@ -31,6 +30,8 @@ POSIX test suite.  This larger set of test is not run as part of the
 continuous integration process because they either take too long or require
 too much memory.
 
+## Tests
+
 The set of tests can be found in the `test/` directory. A selection:
 
 * Run the Tuxera POSIX test suite (test/posix.sh)
@@ -39,6 +40,8 @@ The set of tests can be found in the `test/` directory. A selection:
 * Multiple configurations of iozone (test/iozone.sh)
 * Build PostgreSQL and run tests (test/postgres.sh)
 * Build Git and run unit tests (test/git.sh)
+
+## Support
 
 | Distribution     | Status |
 | ------------     | ------ |
