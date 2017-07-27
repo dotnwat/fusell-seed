@@ -10,13 +10,24 @@ struct filesystem_opts {
   size_t size;
 };
 
-class Node {
+class AddressSpace {
  public:
-  Node(void *base, uintptr_t size) :
-    base_((char*)base), size_(size)
-  {}
+  int init(struct filesystem_opts *opts) {
+    const size_t size = opts->size;
 
-  size_t size() {
+    void *data = mmap(NULL, size, PROT_READ|PROT_WRITE,
+        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+
+    if (data == MAP_FAILED)
+      return -ENOMEM;
+
+    base_ = (char*)data;
+    size_ = size;
+
+    return 0;
+  }
+
+  size_t size() const {
     return size_;
   }
 
@@ -37,38 +48,11 @@ class Node {
   uintptr_t size_;
 };
 
-class AddressSpace {
- public:
-  int init(struct filesystem_opts *opts) {
-    const size_t size = opts->size;
-
-    void *data = mmap(NULL, size, PROT_READ|PROT_WRITE,
-        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-
-    if (data == MAP_FAILED)
-      return -ENOMEM;
-
-    auto node = new Node(data, size);
-
-    nodes_.push_back(node);
-
-    return 0;
-  }
-
-  std::vector<Node*>& nodes() {
-    return nodes_;
-  }
-
- private:
-  std::vector<Node*> nodes_;
-};
-
 struct Extent {
   // logical
   size_t length;
 
   // physical
-  Node *node;
   size_t addr;
   size_t size;
 };

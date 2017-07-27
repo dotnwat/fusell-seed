@@ -52,9 +52,8 @@ FileSystem::FileSystem(AddressSpace *storage) :
   // bump kernel inode cache reference count
   ino_refs_.add(root);
 
-  assert(storage_->nodes().size() == 1);
-  alloc_ = new Allocator(storage_->nodes()[0]->size());
-  total_bytes_ = storage_->nodes()[0]->size();
+  alloc_ = new Allocator(storage_->size());
+  total_bytes_ = storage_->size();
   avail_bytes_ = total_bytes_;
 
   memset(&stat, 0, sizeof(stat));
@@ -342,7 +341,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
         done = std::min(left, (size_t)(seg_end_offset - offset));
 
         size_t blkoff = offset - seg_offset;
-        extent.node->read(dst, (void*)(extent.addr + blkoff), done);
+        storage_->read(dst, (void*)(extent.addr + blkoff), done);
 
       } else if (++it == in->extents_.end()) {
         seg_offset = offset + left;
@@ -1111,7 +1110,6 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
   // construct extent
   Extent extent;
   extent.length = size;
-  extent.node = storage_->nodes()[0];
   extent.addr = alloc_offset;
   extent.size = size;
 
@@ -1194,7 +1192,7 @@ ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *
         std::endl;
 #endif
 
-      extent.node->write((void*)(extent.addr + blkoff), (void*)buf, done);
+      storage_->write((void*)(extent.addr + blkoff), (void*)buf, done);
 
       buf += done;
       offset += done;
