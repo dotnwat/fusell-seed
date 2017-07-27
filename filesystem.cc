@@ -52,14 +52,10 @@ FileSystem::FileSystem(AddressSpace *storage) :
   // bump kernel inode cache reference count
   ino_refs_.add(root);
 
-  total_bytes_ = 0;
-  for (Node *node : storage_->nodes()) {
-    NodeAlloc na(node);
-    node_alloc_.push_back(na);
-    total_bytes_ += node->size();
-  }
+  assert(storage_->nodes().size() == 1);
+  alloc_ = new Allocator(storage_->nodes()[0]->size());
+  total_bytes_ = storage_->nodes()[0]->size();
   avail_bytes_ = total_bytes_;
-  node_alloc_count_ = node_alloc_.size();
 
   memset(&stat, 0, sizeof(stat));
   stat.f_fsid = 983983;
@@ -346,7 +342,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
         done = std::min(left, (size_t)(seg_end_offset - offset));
 
         size_t blkoff = offset - seg_offset;
-        extent.node->node->read(dst, (void*)(extent.addr + blkoff), done);
+        extent.node->read(dst, (void*)(extent.addr + blkoff), done);
 
       } else if (++it == in->extents_.end()) {
         seg_offset = offset + left;
@@ -966,7 +962,7 @@ void FileSystem::ReleaseDir(fuse_ino_t ino) {}
 
 void FileSystem::free_space(Extent *extent)
 {
-  extent->node->alloc->free(extent->addr, extent->size);
+  alloc_->free(extent->addr, extent->size);
   avail_bytes_ += extent->size;
 }
 
@@ -1098,10 +1094,6 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
     << upper_bound << std::endl;
 #endif
 
-  // select a target node from which to allocate space
-  NodeAlloc *na = &node_alloc_[in->alloc_node];
-  in->alloc_node = ++in->alloc_node % node_alloc_count_;
-
   // cap allocation size at 1mb, and if it isn't just filling a hole, then
   // make sure there is a lower bound on allocation size.
   size = std::min(size, (size_t)(1ULL<<20));
@@ -1109,7 +1101,7 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
     size = std::max(size, (size_t)8192);
 
   // allocate some space in the target node
-  off_t alloc_offset = na->alloc->alloc(size);
+  off_t alloc_offset = alloc_->alloc(size);
   if (alloc_offset == -ENOMEM)
     return -ENOSPC;
   assert(alloc_offset >= 0);
@@ -1119,7 +1111,7 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
   // construct extent
   Extent extent;
   extent.length = size;
-  extent.node = na;
+  extent.node = storage_->nodes()[0];
   extent.addr = alloc_offset;
   extent.size = size;
 
@@ -1202,7 +1194,7 @@ ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *
         std::endl;
 #endif
 
-      extent.node->node->write((void*)(extent.addr + blkoff), (void*)buf, done);
+      extent.node->write((void*)(extent.addr + blkoff), (void*)buf, done);
 
       buf += done;
       offset += done;

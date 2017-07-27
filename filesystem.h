@@ -94,8 +94,7 @@ class FileSystem {
   AddressSpace *storage_;
   struct statvfs stat;
 
-  int node_alloc_count_;
-  std::vector<NodeAlloc> node_alloc_;
+  Allocator *alloc_;
 
   InodeIndex ino_refs_;
 

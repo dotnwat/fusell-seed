@@ -63,21 +63,12 @@ class AddressSpace {
   std::vector<Node*> nodes_;
 };
 
-struct NodeAlloc {
-  NodeAlloc(Node *n) :
-    node(n), alloc(new Allocator(n->size()))
-  {}
-
-  Node *node;
-  Allocator *alloc;
-};
-
 struct Extent {
   // logical
   size_t length;
 
   // physical
-  NodeAlloc *node;
+  Node *node;
   size_t addr;
   size_t size;
 };

@@ -28,8 +28,6 @@ class Inode {
 
   std::map<off_t, Extent> extents_;
 
-  int alloc_node;
-
  private:
   bool ino_set_;
   fuse_ino_t ino_;
