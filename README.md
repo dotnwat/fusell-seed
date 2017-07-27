@@ -30,8 +30,6 @@ POSIX test suite.  This larger set of test is not run as part of the
 continuous integration process because they either take too long or require
 too much memory.
 
-## Tests
-
 The set of tests can be found in the `test/` directory. A selection:
 
 * Run the Tuxera POSIX test suite (test/posix.sh)
@@ -41,7 +39,7 @@ The set of tests can be found in the `test/` directory. A selection:
 * Build PostgreSQL and run tests (test/postgres.sh)
 * Build Git and run unit tests (test/git.sh)
 
-## Support
+The following set of distributions are tested using TravisCI:
 
 | Distribution     | Status |
 | ------------     | ------ |
