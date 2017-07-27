@@ -32,5 +32,6 @@ matrix:
 #    - os: linux
 #      env: DOCKER_IMAGE=ubuntu:xenial RUN_COVERAGE=1
     - os: osx
+      env: OSX_BUILD=1 # used for README.md badges
 
 script: ci/script.sh
