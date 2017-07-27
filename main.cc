@@ -4,7 +4,11 @@
 #include <cstring>
 #include <iostream>
 
-#include <linux/limits.h>
+#if defined(__linux__)
+# include <linux/limits.h>
+#elif defined(__APPLE__)
+# include <sys/syslimits.h>
+#endif
 
 #include <fuse.h>
 #include <fuse_opt.h>
