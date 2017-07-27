@@ -54,19 +54,4 @@ class LocalAddressSpace : public AddressSpace {
   std::vector<Node*> nodes_;
 };
 
-class GASNetAddressSpace : public AddressSpace {
- public:
-  int init(int *argc, char ***argv, struct gassyfs_opts *opts);
-
-  std::vector<Node*>& nodes() {
-    return nodes_;
-  }
-
-  Node::group_io_handle_t group_io_start();
-  void group_io_wait(Node::group_io_handle_t handle);
-
- private:
-  std::vector<Node*> nodes_;
-};
-
 #endif
