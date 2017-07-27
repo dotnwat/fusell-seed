@@ -431,7 +431,7 @@ int main(int argc, char *argv[])
 
   assert(opts.size > 0);
 
-  auto storage = new LocalAddressSpace;
+  auto storage = new AddressSpace;
   int ret = storage->init(&opts);
   assert(ret == 0);
 

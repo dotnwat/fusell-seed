@@ -6,7 +6,7 @@
 #include <vector>
 #include <fuse.h>
 #include <fuse_lowlevel.h>
-#include "common.h"
+#include "address_space.h"
 
 class FileSystem;
 

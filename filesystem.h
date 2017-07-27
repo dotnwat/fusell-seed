@@ -7,7 +7,6 @@
 #include <unordered_map>
 #include <fuse.h>
 #include <fuse_lowlevel.h>
-#include "common.h"
 #include "inode.h"
 #include "file_handle.h"
 #include "inode_index.h"

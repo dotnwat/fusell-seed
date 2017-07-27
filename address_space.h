@@ -2,35 +2,58 @@
 #define GASSYFS_ADDRESS_SPACE_H_
 #include <cstddef>
 #include <vector>
+#include <sys/mman.h>
+#include <cstring>
+#include "alloc.h"
 
-struct gassyfs_opts;
+struct filesystem_opts {
+  size_t size;
+};
 
-/*
- * A node is a single linearly addressable region that supports random read /
- * write operations (e.g. a GASNet node). The address space exposed by a node
- * is physically located on a single host.
- */
 class Node {
  public:
-  // valid address space: [0, size)
-  virtual size_t size() = 0;
+  Node(void *base, uintptr_t size) :
+    base_((char*)base), size_(size)
+  {}
 
-  // synchronous
-  virtual void read(void *dst, void *src, size_t len) = 0;
-  virtual void write(void *dst, void *src, size_t len) = 0;
+  size_t size() {
+    return size_;
+  }
+
+  void read(void *dst, void *src, size_t len) {
+    char *abs_src = base_ + (uintptr_t)src;
+    assert((abs_src + len - 1) < (base_ + size_));
+    memcpy(dst, abs_src, len);
+  }
+
+  void write(void *dst, void *src, size_t len) {
+    char *abs_dst = base_ + (uintptr_t)dst;
+    assert((abs_dst + len - 1) < (base_ + size_));
+    memcpy(abs_dst, src, len);
+  }
+
+ private:
+  char *base_;
+  uintptr_t size_;
 };
 
-/*
- * An address space is a set of nodes.
- */
 class AddressSpace {
  public:
-  virtual std::vector<Node*>& nodes() = 0;
-};
+  int init(struct filesystem_opts *opts) {
+    const size_t size = opts->size;
 
-class LocalAddressSpace : public AddressSpace {
- public:
-  int init(struct filesystem_opts *opts);
+    void *data = mmap(NULL, size, PROT_READ|PROT_WRITE,
+        MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+
+    if (data == MAP_FAILED)
+      return -ENOMEM;
+
+    auto node = new Node(data, size);
+
+    nodes_.push_back(node);
+
+    return 0;
+  }
 
   std::vector<Node*>& nodes() {
     return nodes_;
@@ -38,6 +61,25 @@ class LocalAddressSpace : public AddressSpace {
 
  private:
   std::vector<Node*> nodes_;
+};
+
+struct NodeAlloc {
+  NodeAlloc(Node *n) :
+    node(n), alloc(new Allocator(n->size()))
+  {}
+
+  Node *node;
+  Allocator *alloc;
+};
+
+struct Extent {
+  // logical
+  size_t length;
+
+  // physical
+  NodeAlloc *node;
+  size_t addr;
+  size_t size;
 };
 
 #endif
