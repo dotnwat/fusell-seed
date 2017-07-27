@@ -421,7 +421,7 @@ int main(int argc, char *argv[])
   struct filesystem_opts opts;
 
   // option defaults
-  opts.size   = 512;
+  opts.size   = 512 << 20;
 
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
