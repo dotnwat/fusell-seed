@@ -7,6 +7,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
   brew update || true
   brew tap caskroom/cask || true
   brew cask install osxfuse || true
+  brew install cmake || true
   exit 0
 fi
 
@@ -19,7 +20,7 @@ case $ID in
   debian|ubuntu)
     $SUDO apt-get update -qq
     $SUDO apt-get install -qq build-essential pkg-config \
-        libfuse-dev libacl1-dev
+        libfuse-dev libacl1-dev cmake
 	;;
 
   centos|fedora)
@@ -28,7 +29,7 @@ case $ID in
       yumdnf="dnf"
     fi
     $SUDO $yumdnf install -y fuse-devel gcc-c++ make pkgconfig \
-        libacl-devel perl-Test-Harness
+        libacl-devel perl-Test-Harness cmake
 	;;
 
   *)
