@@ -490,13 +490,13 @@ int main(int argc, char *argv[])
   std::cout << std::endl;
   fflush(stdout); // FIXME: std::abc version?
 
-  FileSystem *fs = new FileSystem(opts.size);
+  FileSystem fs(opts.size);
 
   if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
       (ch = fuse_mount(mountpoint, &args)) != NULL) {
     struct fuse_session *se;
 
-    se = fuse_lowlevel_new(&args, &ll_oper, sizeof(ll_oper), fs);
+    se = fuse_lowlevel_new(&args, &ll_oper, sizeof(ll_oper), &fs);
     if (se != NULL) {
       if (fuse_set_signal_handlers(se) != -1) {
         fuse_session_add_chan(se, ch);
