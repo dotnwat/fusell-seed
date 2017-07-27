@@ -13,6 +13,11 @@ tmpdir=`mktemp -d 2>/dev/null || mktemp -d -t 'tmpdir'`
 sleep 5
 mount
 
+# tests aren't run on mac
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  exit 0
+fi
+
 pushd ${tmpdir}
 sudo ${PROJ_DIR}/test/posix.sh
 popd
