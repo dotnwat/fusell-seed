@@ -10,11 +10,10 @@
 #include "inode.h"
 #include "file_handle.h"
 #include "inode_index.h"
-#include "address_space.h"
 
 class FileSystem {
  public:
-  explicit FileSystem(AddressSpace *storage);
+  explicit FileSystem(size_t size);
 
   FileSystem(const FileSystem& other) = delete;
   FileSystem(FileSystem&& other) = delete;
@@ -91,10 +90,7 @@ class FileSystem {
 
   fuse_ino_t next_ino_;
   std::mutex mutex_;
-  AddressSpace *storage_;
   struct statvfs stat;
-
-  Allocator *alloc_;
 
   InodeIndex ino_refs_;
 

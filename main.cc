@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 
+#include <stddef.h>
 #if defined(__linux__)
 # include <linux/limits.h>
 #elif defined(__APPLE__)
@@ -382,6 +383,10 @@ enum {
   KEY_HELP,
 };
 
+struct filesystem_opts {
+  size_t size;
+};
+
 #define FS_OPT(t, p, v) { t, offsetof(struct filesystem_opts, p), v }
 
 static struct fuse_opt fs_fuse_opts[] = {
@@ -430,11 +435,6 @@ int main(int argc, char *argv[])
   }
 
   assert(opts.size > 0);
-
-  auto storage = new AddressSpace;
-  int ret = storage->init(&opts);
-  assert(ret == 0);
-
   std::cout << "Heap size:             " << opts.size << std::endl;
 
   struct fuse_chan *ch;
@@ -490,7 +490,7 @@ int main(int argc, char *argv[])
   std::cout << std::endl;
   fflush(stdout); // FIXME: std::abc version?
 
-  FileSystem *fs = new FileSystem(storage);
+  FileSystem *fs = new FileSystem(opts.size);
 
   if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
       (ch = fuse_mount(mountpoint, &args)) != NULL) {

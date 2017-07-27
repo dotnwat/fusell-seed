@@ -39,8 +39,8 @@ static inline std::time_t time_now(void)
 }
 #endif
 
-FileSystem::FileSystem(AddressSpace *storage) :
-  next_ino_(FUSE_ROOT_ID + 1), storage_(storage)
+FileSystem::FileSystem(size_t size) :
+  next_ino_(FUSE_ROOT_ID + 1)
 {
   std::time_t now = time_now();
 
@@ -52,8 +52,7 @@ FileSystem::FileSystem(AddressSpace *storage) :
   // bump kernel inode cache reference count
   ino_refs_.add(root);
 
-  alloc_ = new Allocator(storage_->size());
-  total_bytes_ = storage_->size();
+  total_bytes_ = size;
   avail_bytes_ = total_bytes_;
 
   memset(&stat, 0, sizeof(stat));
@@ -341,7 +340,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
         done = std::min(left, (size_t)(seg_end_offset - offset));
 
         size_t blkoff = offset - seg_offset;
-        storage_->read(dst, (void*)(extent.addr + blkoff), done);
+        std::memcpy(dst, extent.addr.get() + blkoff, done);
 
       } else if (++it == in->extents_.end()) {
         seg_offset = offset + left;
@@ -961,7 +960,7 @@ void FileSystem::ReleaseDir(fuse_ino_t ino) {}
 
 void FileSystem::free_space(Extent *extent)
 {
-  alloc_->free(extent->addr, extent->size);
+  extent->addr.release();
   avail_bytes_ += extent->size;
 }
 
@@ -1088,39 +1087,27 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
 int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
     off_t offset, size_t size, bool upper_bound)
 {
-#if 0
-  std::cout << "alloc: offset=" << offset << " size=" << size << " upper_bound="
-    << upper_bound << std::endl;
-#endif
-
   // cap allocation size at 1mb, and if it isn't just filling a hole, then
   // make sure there is a lower bound on allocation size.
   size = std::min(size, (size_t)(1ULL<<20));
   if (!upper_bound)
     size = std::max(size, (size_t)8192);
 
-  // allocate some space in the target node
-  off_t alloc_offset = alloc_->alloc(size);
-  if (alloc_offset == -ENOMEM)
+  // allocate some space
+  if (avail_bytes_ < size)
     return -ENOSPC;
-  assert(alloc_offset >= 0);
 
+  std::unique_ptr<char[]> addr(new char[size]);
   avail_bytes_ -= size;
 
   // construct extent
   Extent extent;
   extent.length = size;
-  extent.addr = alloc_offset;
+  extent.addr = std::move(addr);
   extent.size = size;
 
-#if 0
-  std::cout << "   alloc extent: length=" << extent.length <<
-    " addr=" << extent.addr <<
-    " size=" << extent.size <<
-    std::endl;
-#endif
-
-  auto ret = in->extents_.insert(std::make_pair(offset, extent));
+  auto ret = in->extents_.insert(std::make_pair(offset,
+        std::move(extent)));
   assert(ret.second);
   *it = ret.first;
 
@@ -1192,7 +1179,7 @@ ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *
         std::endl;
 #endif
 
-      storage_->write((void*)(extent.addr + blkoff), (void*)buf, done);
+      std::memcpy(extent.addr.get() + blkoff, buf, done);
 
       buf += done;
       offset += done;

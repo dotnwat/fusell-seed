@@ -6,9 +6,17 @@
 #include <vector>
 #include <fuse.h>
 #include <fuse_lowlevel.h>
-#include "address_space.h"
 
 class FileSystem;
+
+struct Extent {
+  // logical
+  size_t length;
+
+  // physical
+  std::unique_ptr<char[]> addr;
+  size_t size;
+};
 
 class Inode {
  public:
