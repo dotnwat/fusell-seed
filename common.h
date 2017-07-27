@@ -4,7 +4,7 @@
 #include "alloc.h"
 
 struct filesystem_opts {
-  size_t heap_size;
+  size_t size;
 };
 
 struct NodeAlloc {

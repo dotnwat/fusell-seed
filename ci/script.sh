@@ -3,16 +3,15 @@
 set -e
 set -x
 
+THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJ_DIR=${THIS_DIR}/../
+
 if [ ! -z ${DOCKER_IMAGE+x} ]; then
-  ci_env=""
-  if [ "${RUN_COVERAGE}" == 1 ]; then
-    ci_env=`bash <(curl -s https://codecov.io/env)`
-  fi
-  docker run --net=host --rm -v \
-    ${TRAVIS_BUILD_DIR}:/code -w="/code" \
-    $ci_env -e RUN_COVERAGE=${RUN_COVERAGE} \
-    ${DOCKER_IMAGE} /bin/bash -c "./ci/install-deps.sh && ./ci/run.sh"
+  docker run --privileged --rm \
+    -v ${PROJ_DIR}:/code -w="/code" \
+    ${DOCKER_IMAGE} /bin/bash -c "./ci/install-deps.sh && ./ci/build.sh"
 else
-  ${TRAVIS_BUILD_DIR}/ci/install-deps.sh
-  ${TRAVIS_BUILD_DIR}/ci/run.sh
+  ${PROJ_DIR}/ci/install-deps.sh
+  ${PROJ_DIR}/ci/build.sh
+  ${PROJ_DIR}/ci/run.sh
 fi
