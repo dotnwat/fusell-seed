@@ -1,5 +1,3 @@
-#define FUSE_USE_VERSION 30
-
 #include <cassert>
 #include <cstring>
 #include <iostream>

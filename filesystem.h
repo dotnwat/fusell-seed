@@ -1,5 +1,5 @@
-#ifndef GASSYFS_GASSY_FS_H_
-#define GASSYFS_GASSY_FS_H_
+#pragma once
+
 #include <cassert>
 #include <map>
 #include <mutex>
@@ -16,6 +16,11 @@
 class FileSystem {
  public:
   explicit FileSystem(AddressSpace *storage);
+
+  FileSystem(const FileSystem& other) = delete;
+  FileSystem(FileSystem&& other) = delete;
+  FileSystem& operator=(const FileSystem& other) = delete;
+  FileSystem& operator=(const FileSystem&& other) = delete;
 
   int Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
       int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid);
@@ -98,5 +103,3 @@ class FileSystem {
   size_t total_bytes_;
   size_t avail_bytes_;
 };
-
-#endif
