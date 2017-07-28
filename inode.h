@@ -10,12 +10,13 @@
 class FileSystem;
 
 struct Extent {
-  // logical
-  size_t length;
+  Extent(size_t size) :
+    size(size),
+    buf(new char[size])
+  {}
 
-  // physical
-  std::unique_ptr<char[]> addr;
   size_t size;
+  std::unique_ptr<char[]> buf;
 };
 
 class Inode {

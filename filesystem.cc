@@ -329,7 +329,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
       memset(dst, 0, done);
     } else {
       const auto& extent = it->second;
-      off_t seg_end_offset = seg_offset + extent.length;
+      off_t seg_end_offset = seg_offset + extent.size;
 
       // fixme: there may be a case here where the end of file lands inside an
       // allocated extent, but logically it shoudl be returning zeros
@@ -340,7 +340,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
         done = std::min(left, (size_t)(seg_end_offset - offset));
 
         size_t blkoff = offset - seg_offset;
-        std::memcpy(dst, extent.addr.get() + blkoff, done);
+        std::memcpy(dst, extent.buf.get() + blkoff, done);
 
       } else if (++it == in->extents_.end()) {
         seg_offset = offset + left;
@@ -960,7 +960,7 @@ void FileSystem::ReleaseDir(fuse_ino_t ino) {}
 
 void FileSystem::free_space(Extent *extent)
 {
-  extent->addr.release();
+  extent->buf.release();
   avail_bytes_ += extent->size;
 }
 
@@ -1013,7 +1013,7 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
     }
 
     const auto& extent = it->second;
-    off_t extent_end = extent_offset + extent.length;
+    off_t extent_end = extent_offset + extent.size;
 
     if (newsize <= extent_end)
       it++;
@@ -1053,7 +1053,7 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
     assert(in->i_st.st_size >= extent_offset);
 
     const auto& extent = it->second;
-    off_t extent_end = extent_offset + extent.length;
+    off_t extent_end = extent_offset + extent.size;
 
     if (extent_end < in->i_st.st_size) {
       in->i_st.st_size = newsize;
@@ -1097,17 +1097,9 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
   if (avail_bytes_ < size)
     return -ENOSPC;
 
-  std::unique_ptr<char[]> addr(new char[size]);
   avail_bytes_ -= size;
 
-  // construct extent
-  Extent extent;
-  extent.length = size;
-  extent.addr = std::move(addr);
-  extent.size = size;
-
-  auto ret = in->extents_.insert(std::make_pair(offset,
-        std::move(extent)));
+  auto ret = in->extents_.emplace(offset, Extent(size));
   assert(ret.second);
   *it = ret.first;
 
@@ -1162,24 +1154,14 @@ ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *
     }
 
     const auto& extent = it->second;
-    off_t seg_end_offset = seg_offset + extent.length;
+    off_t seg_end_offset = seg_offset + extent.size;
 
     // case 2. the offset falls within the current extent: write data
     if (offset < seg_end_offset) {
       size_t done = std::min(left, (size_t)(seg_end_offset - offset));
       size_t blkoff = offset - seg_offset;
 
-#if 0
-      std::cout << "write:case2: " <<
-        " offset=" << offset <<
-        " seg_offset=" << seg_offset <<
-        " blkoff=" << blkoff <<
-        " done=" << done <<
-        " dst=" << (extent.addr + blkoff) <<
-        std::endl;
-#endif
-
-      std::memcpy(extent.addr.get() + blkoff, buf, done);
+      std::memcpy(extent.buf.get() + blkoff, buf, done);
 
       buf += done;
       offset += done;
