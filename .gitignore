@@ -5,3 +5,5 @@ compile_commands.json
 build
 main
 Makefile
+fstest
+.*.swp

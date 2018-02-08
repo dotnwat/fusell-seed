@@ -1,14 +1,22 @@
-#ifndef GASSYFS_INODE_H_
-#define GASSYFS_INODE_H_
+#pragma once
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 #include <fuse.h>
 #include <fuse_lowlevel.h>
-#include "common.h"
 
 class FileSystem;
+
+struct Extent {
+  Extent(size_t size) :
+    size(size),
+    buf(new char[size])
+  {}
+
+  size_t size;
+  std::unique_ptr<char[]> buf;
+};
 
 class Inode {
  public:
@@ -27,8 +35,6 @@ class Inode {
   bool is_symlink() const;
 
   std::map<off_t, Extent> extents_;
-
-  int alloc_node;
 
  private:
   bool ino_set_;
@@ -64,5 +70,3 @@ class SymlinkInode : public Inode {
     }
   std::string link;
 };
-
-#endif

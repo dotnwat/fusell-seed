@@ -25,12 +25,6 @@ matrix:
       env: DOCKER_IMAGE=ubuntu:trusty
     - os: linux
       env: DOCKER_IMAGE=ubuntu:xenial
-    - os: linux
-      env: DOCKER_IMAGE=ubuntu:yakkety
-    - os: linux
-      env: DOCKER_IMAGE=ubuntu:zesty
-#    - os: linux
-#      env: DOCKER_IMAGE=ubuntu:xenial RUN_COVERAGE=1
     - os: osx
       env: OSX_BUILD=1 # used for README.md badges
 

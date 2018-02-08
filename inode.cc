@@ -3,11 +3,10 @@
 #include <string.h>
 #include <fuse.h>
 #include "filesystem.h"
-#include "common.h"
 
 Inode::Inode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
     mode_t mode, FileSystem *fs) :
-  alloc_node(0), ino_set_(false), fs_(fs)
+  ino_set_(false), fs_(fs)
 {
   memset(&i_st, 0, sizeof(i_st));
 

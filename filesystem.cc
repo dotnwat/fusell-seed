@@ -1,48 +1,17 @@
 #include "filesystem.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <iostream>
 #include <string>
-
-#if defined(__linux__)
-# include <linux/limits.h>
-#elif defined(__APPLE__)
-# include <sys/syslimits.h>
-# include <mach/clock.h>
-# include <mach/mach.h>
-#endif
-
-#include <time.h>
+#include <limits.h>
 #include <unistd.h>
-
 #include "inode.h"
 
-#ifdef __MACH__
-static inline std::time_t time_now(void)
+FileSystem::FileSystem(size_t size) :
+  next_ino_(FUSE_ROOT_ID + 1)
 {
-  clock_serv_t cclock;
-  mach_timespec_t mts;
-  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
-  clock_get_time(cclock, &mts);
-  mach_port_deallocate(mach_task_self(), cclock);
-  return mts.tv_sec;
-}
-#else
-static inline std::time_t time_now(void)
-{
-  struct timespec ts;
-  int ret = clock_gettime(CLOCK_REALTIME, &ts);
-  assert(ret == 0);
-  return ts.tv_sec;
-}
-#endif
-
-FileSystem::FileSystem(AddressSpace *storage) :
-  next_ino_(FUSE_ROOT_ID + 1), storage_(storage)
-{
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto root = std::make_shared<DirInode>(now,
       getuid(), getgid(), 4096, 0755, this);
@@ -52,14 +21,8 @@ FileSystem::FileSystem(AddressSpace *storage) :
   // bump kernel inode cache reference count
   ino_refs_.add(root);
 
-  total_bytes_ = 0;
-  for (Node *node : storage_->nodes()) {
-    NodeAlloc na(node);
-    node_alloc_.push_back(na);
-    total_bytes_ += node->size();
-  }
+  total_bytes_ = size;
   avail_bytes_ = total_bytes_;
-  node_alloc_count_ = node_alloc_.size();
 
   memset(&stat, 0, sizeof(stat));
   stat.f_fsid = 983983;
@@ -78,7 +41,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<Inode>(now, uid, gid, 4096, S_IFREG | mode, this);
   auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
@@ -143,7 +106,7 @@ int FileSystem::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid
       return -EPERM;
   }
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   in->i_st.st_ctime = now;
   in->i_st.st_nlink--;
@@ -201,7 +164,7 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
     ret = Truncate(in, 0, uid, gid);
     if (ret)
       return ret;
-    std::time_t now = time_now();
+    auto now = std::time(nullptr);
     in->i_st.st_mtime = now;
     in->i_st.st_ctime = now;
   }
@@ -283,7 +246,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
 
   Inode::Ptr in = fh->in;
 
-  in->i_st.st_atime = time_now();
+  in->i_st.st_atime = std::time(nullptr);
 
   // reads that start past eof return nothing
   if (offset >= in->i_st.st_size || size == 0)
@@ -324,8 +287,6 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
   assert(it != in->extents_.end());
   off_t seg_offset = it->first;
 
-  Node::group_io_handle_t io_handle = storage_->group_io_start();
-
   while (left) {
     // size of movement this round
     size_t done = 0;
@@ -337,7 +298,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
       memset(dst, 0, done);
     } else {
       const auto& extent = it->second;
-      off_t seg_end_offset = seg_offset + extent.length;
+      off_t seg_end_offset = seg_offset + extent.size;
 
       // fixme: there may be a case here where the end of file lands inside an
       // allocated extent, but logically it shoudl be returning zeros
@@ -348,8 +309,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
         done = std::min(left, (size_t)(seg_end_offset - offset));
 
         size_t blkoff = offset - seg_offset;
-        extent.node->node->aio_read(io_handle, dst,
-            (void*)(extent.addr + blkoff), done);
+        std::memcpy(dst, extent.buf.get() + blkoff, done);
 
       } else if (++it == in->extents_.end()) {
         seg_offset = offset + left;
@@ -366,8 +326,6 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
     left -= done;
   }
 
-  storage_->group_io_wait(io_handle);
-
   fh->pos += new_size;
 
   return new_size;
@@ -379,7 +337,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<DirInode>(now, uid, gid, 4096, mode, this);
 
@@ -432,7 +390,7 @@ int FileSystem::Rmdir(fuse_ino_t parent_ino, const std::string& name,
       return -EPERM;
   }
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   parent_in->i_st.st_mtime = now;
   parent_in->i_st.st_ctime = now;
@@ -543,8 +501,7 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
     newparent_children.erase(new_it);
   }
 
-  std::time_t now = time_now();
-  old_in->i_st.st_ctime = now;
+  old_in->i_st.st_ctime = std::time(nullptr);
 
   newparent_children[newname] = old_it->second;
   parent_children.erase(old_it);
@@ -560,7 +517,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
   Inode::Ptr in = ino_refs_.inode(ino);
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   if (to_set & FUSE_SET_ATTR_MODE) {
     if (uid && in->i_st.st_uid != uid)
@@ -603,7 +560,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
 #ifdef FUSE_SET_ATTR_MTIME_NOW
     if (to_set & FUSE_SET_ATTR_MTIME_NOW)
-      in->i_st.st_mtime = time_now();
+      in->i_st.st_mtime = std::time(nullptr);
     else
 #endif
     if (to_set & FUSE_SET_ATTR_MTIME)
@@ -611,7 +568,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
 #ifdef FUSE_SET_ATTR_ATIME_NOW
     if (to_set & FUSE_SET_ATTR_ATIME_NOW)
-      in->i_st.st_atime = time_now();
+      in->i_st.st_atime = std::time(nullptr);
     else
 #endif
     if (to_set & FUSE_SET_ATTR_ATIME)
@@ -666,7 +623,7 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<SymlinkInode>(now, uid, gid, 4096, link, this);
 
@@ -748,7 +705,7 @@ int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string
   if (ret)
     return ret;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   // bump in kernel inode cache reference count
   ino_refs_.get(in);
@@ -848,7 +805,7 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<Inode>(now, uid, gid, 4096, mode, this);
 
@@ -971,7 +928,7 @@ void FileSystem::ReleaseDir(fuse_ino_t ino) {}
 
 void FileSystem::free_space(Extent *extent)
 {
-  extent->node->alloc->free(extent->addr, extent->size);
+  extent->buf.release();
   avail_bytes_ += extent->size;
 }
 
@@ -1024,7 +981,7 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
     }
 
     const auto& extent = it->second;
-    off_t extent_end = extent_offset + extent.length;
+    off_t extent_end = extent_offset + extent.size;
 
     if (newsize <= extent_end)
       it++;
@@ -1064,7 +1021,7 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
     assert(in->i_st.st_size >= extent_offset);
 
     const auto& extent = it->second;
-    off_t extent_end = extent_offset + extent.length;
+    off_t extent_end = extent_offset + extent.size;
 
     if (extent_end < in->i_st.st_size) {
       in->i_st.st_size = newsize;
@@ -1098,72 +1055,28 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
 int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
     off_t offset, size_t size, bool upper_bound)
 {
-#if 0
-  std::cout << "alloc: offset=" << offset << " size=" << size << " upper_bound="
-    << upper_bound << std::endl;
-#endif
-
-  // select a target node from which to allocate space
-  NodeAlloc *na = &node_alloc_[in->alloc_node];
-  in->alloc_node = ++in->alloc_node % node_alloc_count_;
-
   // cap allocation size at 1mb, and if it isn't just filling a hole, then
   // make sure there is a lower bound on allocation size.
   size = std::min(size, (size_t)(1ULL<<20));
   if (!upper_bound)
     size = std::max(size, (size_t)8192);
 
-  // allocate some space in the target node
-  off_t alloc_offset = na->alloc->alloc(size);
-  if (alloc_offset == -ENOMEM)
+  // allocate some space
+  if (avail_bytes_ < size)
     return -ENOSPC;
-  assert(alloc_offset >= 0);
 
   avail_bytes_ -= size;
 
-  // construct extent
-  Extent extent;
-  extent.length = size;
-  extent.node = na;
-  extent.addr = alloc_offset;
-  extent.size = size;
-
-#if 0
-  std::cout << "   alloc extent: length=" << extent.length <<
-    " addr=" << extent.addr <<
-    " size=" << extent.size <<
-    std::endl;
-#endif
-
-  auto ret = in->extents_.insert(std::make_pair(offset, extent));
+  auto ret = in->extents_.emplace(offset, Extent(size));
   assert(ret.second);
   *it = ret.first;
 
   return 0;
 }
 
-class IOFinisher {
- public:
-  IOFinisher(AddressSpace *storage, Node::group_io_handle_t io_handle) :
-    storage_(storage), io_handle_(io_handle)
-  {}
-
-  ~IOFinisher() {
-    storage_->group_io_wait(io_handle_);
-  }
-
- private:
-  AddressSpace *storage_;
-  Node::group_io_handle_t io_handle_;
-};
-
 ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *buf)
 {
-#if 0
-  std::cout << "write: offset=" << offset << " size=" << size << std::endl;
-#endif
-
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
   in->i_st.st_ctime = now;
   in->i_st.st_mtime = now;
 
@@ -1183,11 +1096,6 @@ ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *
   off_t seg_offset = it->first;
 
   size_t left = size;
-
-  Node::group_io_handle_t io_handle = storage_->group_io_start();
-
-  // raii finisher in case allocate_space returns an error
-  IOFinisher finisher(storage_, io_handle);
 
   while (left) {
     // case 1. the offset is contained in a non-allocated region before the
@@ -1210,25 +1118,14 @@ ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *
     }
 
     const auto& extent = it->second;
-    off_t seg_end_offset = seg_offset + extent.length;
+    off_t seg_end_offset = seg_offset + extent.size;
 
     // case 2. the offset falls within the current extent: write data
     if (offset < seg_end_offset) {
       size_t done = std::min(left, (size_t)(seg_end_offset - offset));
       size_t blkoff = offset - seg_offset;
 
-#if 0
-      std::cout << "write:case2: " <<
-        " offset=" << offset <<
-        " seg_offset=" << seg_offset <<
-        " blkoff=" << blkoff <<
-        " done=" << done <<
-        " dst=" << (extent.addr + blkoff) <<
-        std::endl;
-#endif
-
-      extent.node->node->aio_write(io_handle,
-          (void*)(extent.addr + blkoff), (void*)buf, done);
+      std::memcpy(extent.buf.get() + blkoff, buf, done);
 
       buf += done;
       offset += done;
