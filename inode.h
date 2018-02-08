@@ -1,5 +1,4 @@
-#ifndef GASSYFS_INODE_H_
-#define GASSYFS_INODE_H_
+#pragma once
 #include <map>
 #include <memory>
 #include <string>
@@ -71,5 +70,3 @@ class SymlinkInode : public Inode {
     }
   std::string link;
 };
-
-#endif

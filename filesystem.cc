@@ -1,48 +1,17 @@
 #include "filesystem.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <iostream>
 #include <string>
-
-#if defined(__linux__)
-# include <linux/limits.h>
-#elif defined(__APPLE__)
-# include <sys/syslimits.h>
-# include <mach/clock.h>
-# include <mach/mach.h>
-#endif
-
-#include <time.h>
+#include <limits.h>
 #include <unistd.h>
-
 #include "inode.h"
-
-#ifdef __MACH__
-static inline std::time_t time_now(void)
-{
-  clock_serv_t cclock;
-  mach_timespec_t mts;
-  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
-  clock_get_time(cclock, &mts);
-  mach_port_deallocate(mach_task_self(), cclock);
-  return mts.tv_sec;
-}
-#else
-static inline std::time_t time_now(void)
-{
-  struct timespec ts;
-  int ret = clock_gettime(CLOCK_REALTIME, &ts);
-  assert(ret == 0);
-  return ts.tv_sec;
-}
-#endif
 
 FileSystem::FileSystem(size_t size) :
   next_ino_(FUSE_ROOT_ID + 1)
 {
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto root = std::make_shared<DirInode>(now,
       getuid(), getgid(), 4096, 0755, this);
@@ -72,7 +41,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<Inode>(now, uid, gid, 4096, S_IFREG | mode, this);
   auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
@@ -137,7 +106,7 @@ int FileSystem::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid
       return -EPERM;
   }
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   in->i_st.st_ctime = now;
   in->i_st.st_nlink--;
@@ -195,7 +164,7 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
     ret = Truncate(in, 0, uid, gid);
     if (ret)
       return ret;
-    std::time_t now = time_now();
+    auto now = std::time(nullptr);
     in->i_st.st_mtime = now;
     in->i_st.st_ctime = now;
   }
@@ -277,7 +246,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
 
   Inode::Ptr in = fh->in;
 
-  in->i_st.st_atime = time_now();
+  in->i_st.st_atime = std::time(nullptr);
 
   // reads that start past eof return nothing
   if (offset >= in->i_st.st_size || size == 0)
@@ -368,7 +337,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<DirInode>(now, uid, gid, 4096, mode, this);
 
@@ -421,7 +390,7 @@ int FileSystem::Rmdir(fuse_ino_t parent_ino, const std::string& name,
       return -EPERM;
   }
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   parent_in->i_st.st_mtime = now;
   parent_in->i_st.st_ctime = now;
@@ -532,8 +501,7 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
     newparent_children.erase(new_it);
   }
 
-  std::time_t now = time_now();
-  old_in->i_st.st_ctime = now;
+  old_in->i_st.st_ctime = std::time(nullptr);
 
   newparent_children[newname] = old_it->second;
   parent_children.erase(old_it);
@@ -549,7 +517,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
   Inode::Ptr in = ino_refs_.inode(ino);
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   if (to_set & FUSE_SET_ATTR_MODE) {
     if (uid && in->i_st.st_uid != uid)
@@ -592,7 +560,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
 #ifdef FUSE_SET_ATTR_MTIME_NOW
     if (to_set & FUSE_SET_ATTR_MTIME_NOW)
-      in->i_st.st_mtime = time_now();
+      in->i_st.st_mtime = std::time(nullptr);
     else
 #endif
     if (to_set & FUSE_SET_ATTR_MTIME)
@@ -600,7 +568,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
 #ifdef FUSE_SET_ATTR_ATIME_NOW
     if (to_set & FUSE_SET_ATTR_ATIME_NOW)
-      in->i_st.st_atime = time_now();
+      in->i_st.st_atime = std::time(nullptr);
     else
 #endif
     if (to_set & FUSE_SET_ATTR_ATIME)
@@ -655,7 +623,7 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<SymlinkInode>(now, uid, gid, 4096, link, this);
 
@@ -737,7 +705,7 @@ int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string
   if (ret)
     return ret;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   // bump in kernel inode cache reference count
   ino_refs_.get(in);
@@ -837,7 +805,7 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   if (name.length() > NAME_MAX)
     return -ENAMETOOLONG;
 
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
 
   auto in = std::make_shared<Inode>(now, uid, gid, 4096, mode, this);
 
@@ -1108,11 +1076,7 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
 
 ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *buf)
 {
-#if 0
-  std::cout << "write: offset=" << offset << " size=" << size << std::endl;
-#endif
-
-  std::time_t now = time_now();
+  auto now = std::time(nullptr);
   in->i_st.st_ctime = now;
   in->i_st.st_mtime = now;
 
