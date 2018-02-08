@@ -1,5 +1,4 @@
-#ifndef GASSYFS_INODE_INDEX_H_
-#define GASSYFS_INODE_INDEX_H_
+#pragma once
 #include <unordered_map>
 #include <fuse.h>
 #include "inode.h"
@@ -38,5 +37,3 @@ class InodeIndex {
   std::unordered_map<fuse_ino_t,
     std::pair<long int, Inode::Ptr>> refs_;
 };
-
-#endif
