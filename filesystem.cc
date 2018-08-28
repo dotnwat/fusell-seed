@@ -45,7 +45,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
   auto now = std::time(nullptr);
 
   auto in = std::make_shared<RegInode>(next_ino_++, now, uid, gid, 4096, S_IFREG | mode, this);
-  auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
+  auto fh = std::make_unique<FileHandle>(in, flags);
 
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -155,7 +155,7 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
   auto generic_in = ino_refs_.inode(ino);
   auto in = std::dynamic_pointer_cast<RegInode>(generic_in);
   assert(in->is_regular());
-  auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
+  auto fh = std::make_unique<FileHandle>(in, flags);
 
   int ret = Access(in, mode, uid, gid);
   if (ret)
