@@ -32,8 +32,11 @@ FileSystem::FileSystem(size_t size) :
   stat.f_bfree = stat.f_blocks;
   stat.f_bavail = stat.f_blocks;
 
-  // TODO: is_always_lock_free()
-  assert(next_ino_.is_lock_free());
+  auto console = spdlog::stdout_color_mt("console");
+
+  if (!next_ino_.is_always_lock_free) {
+    console->warn("inode number allocation may not be lock free");
+  }
 }
 
 int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,

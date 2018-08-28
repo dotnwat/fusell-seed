@@ -35,6 +35,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wall -g")
 find_package(PkgConfig REQUIRED)
 pkg_search_module(FUSE REQUIRED fuse)
 
+include_directories(spdlog/include)
+
 add_executable(main main.cc inode.cc filesystem.cc inode_index.cc)
 target_include_directories(main PRIVATE ${FUSE_INCLUDE_DIRS})
 target_link_libraries(main ${FUSE_LIBRARIES})

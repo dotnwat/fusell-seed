@@ -11,6 +11,8 @@
 #include "inode.h"
 #include "file_handle.h"
 #include "inode_index.h"
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
 
 class FileSystem {
  public:
