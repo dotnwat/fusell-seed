@@ -9,14 +9,12 @@
 #include "inode.h"
 
 FileSystem::FileSystem(size_t size) :
-  next_ino_(FUSE_ROOT_ID + 1)
+  next_ino_(FUSE_ROOT_ID)
 {
   auto now = std::time(nullptr);
 
-  auto root = std::make_shared<DirInode>(now,
+  auto root = std::make_shared<DirInode>(next_ino_++, now,
       getuid(), getgid(), 4096, 0755, this);
-
-  root->set_ino(FUSE_ROOT_ID);
 
   // bump kernel inode cache reference count
   ino_refs_.add(root);
@@ -33,6 +31,9 @@ FileSystem::FileSystem(size_t size) :
   stat.f_files = 0;
   stat.f_bfree = stat.f_blocks;
   stat.f_bavail = stat.f_blocks;
+
+  // TODO: is_always_lock_free()
+  assert(next_ino_.is_lock_free());
 }
 
 int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
@@ -43,7 +44,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<RegInode>(now, uid, gid, 4096, S_IFREG | mode, this);
+  auto in = std::make_shared<RegInode>(next_ino_++, now, uid, gid, 4096, S_IFREG | mode, this);
   auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
 
   std::lock_guard<std::mutex> l(mutex_);
@@ -56,8 +57,6 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);
@@ -345,7 +344,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<DirInode>(now, uid, gid, 4096, mode, this);
+  auto in = std::make_shared<DirInode>(next_ino_++, now, uid, gid, 4096, mode, this);
 
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -357,8 +356,6 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);
@@ -633,7 +630,7 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<SymlinkInode>(now, uid, gid, 4096, link, this);
+  auto in = std::make_shared<SymlinkInode>(next_ino_++, now, uid, gid, 4096, link, this);
 
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -645,8 +642,6 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);
@@ -815,7 +810,7 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<Inode>(now, uid, gid, 4096, mode, this);
+  auto in = std::make_shared<Inode>(next_ino_++, now, uid, gid, 4096, mode, this);
 
   // directories start with nlink = 2, but according to mknod(2), "Under
   // Linux, mknod() cannot be used to create directories.  One should make
@@ -832,8 +827,6 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);

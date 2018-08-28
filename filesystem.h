@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <string>
@@ -88,7 +89,8 @@ class FileSystem {
   int allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
       off_t offset, size_t size, bool upper_bound);
 
-  fuse_ino_t next_ino_;
+  std::atomic<fuse_ino_t> next_ino_;
+
   std::mutex mutex_;
   struct statvfs stat;
 
