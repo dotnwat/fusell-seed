@@ -83,9 +83,9 @@ class FileSystem {
   void free_space(Extent *extent);
 
  private:
-  int Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid);
-  ssize_t Write(Inode::Ptr in, off_t offset, size_t size, const char *buf);
-  int allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
+  int Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid);
+  ssize_t Write(RegInode::Ptr in, off_t offset, size_t size, const char *buf);
+  int allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
       off_t offset, size_t size, bool upper_bound);
 
   fuse_ino_t next_ino_;

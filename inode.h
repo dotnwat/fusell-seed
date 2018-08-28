@@ -24,25 +24,36 @@ class Inode {
 
   Inode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
       mode_t mode, FileSystem *fs);
-  virtual ~Inode();
+  virtual ~Inode() {}
 
   void set_ino(fuse_ino_t ino);
   fuse_ino_t ino() const;
 
   struct stat i_st;
 
+  bool is_regular() const;
   bool is_directory() const;
   bool is_symlink() const;
-
-  std::map<off_t, Extent> extents_;
 
  private:
   bool ino_set_;
   fuse_ino_t ino_;
+
+ protected:
   FileSystem *fs_;
 };
 
-// TODO: specialize for regular file
+class RegInode : public Inode {
+ public:
+  typedef std::shared_ptr<RegInode> Ptr;
+  RegInode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
+      mode_t mode, FileSystem *fs) :
+    Inode(time, uid, gid, blksize, mode, fs) {
+      i_st.st_mode = S_IFREG | mode;
+    }
+  ~RegInode();
+  std::map<off_t, Extent> extents_;
+};
 
 class DirInode : public Inode {
  public:

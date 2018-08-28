@@ -43,7 +43,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<Inode>(now, uid, gid, 4096, S_IFREG | mode, this);
+  auto in = std::make_shared<RegInode>(now, uid, gid, 4096, S_IFREG | mode, this);
   auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
 
   std::lock_guard<std::mutex> l(mutex_);
@@ -153,7 +153,9 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto in = ino_refs_.inode(ino);
+  auto generic_in = ino_refs_.inode(ino);
+  auto in = std::dynamic_pointer_cast<RegInode>(generic_in);
+  assert(in->is_regular());
   auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
 
   int ret = Access(in, mode, uid, gid);
@@ -193,7 +195,9 @@ ssize_t FileSystem::Write(FileHandle *fh, off_t offset, size_t size, const char 
   std::lock_guard<std::mutex> l(mutex_);
 
   Inode::Ptr in = fh->in;
-  ssize_t ret = Write(in, offset, size, buf);
+  assert(in->is_regular());
+  auto reg_in = std::dynamic_pointer_cast<RegInode>(in);
+  ssize_t ret = Write(reg_in, offset, size, buf);
   if (ret > 0)
     fh->pos += ret;
 
@@ -205,7 +209,9 @@ ssize_t FileSystem::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = fh->in;
+  Inode::Ptr gen_in = fh->in;
+  assert(gen_in->is_regular());
+  auto in = std::dynamic_pointer_cast<RegInode>(gen_in);
 
   size_t written = 0;
 
@@ -244,7 +250,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = fh->in;
+  RegInode::Ptr in = std::dynamic_pointer_cast<RegInode>(fh->in);
 
   in->i_st.st_atime = std::time(nullptr);
 
@@ -600,7 +606,9 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
     if (attr->st_size > 2199023255552)
       return -EFBIG;
 
-    int ret = Truncate(in, attr->st_size, uid, gid);
+    assert(in->is_regular());
+    auto reg_in = std::dynamic_pointer_cast<RegInode>(in);
+    int ret = Truncate(reg_in, attr->st_size, uid, gid);
     if (ret < 0)
       return ret;
 
@@ -932,7 +940,7 @@ void FileSystem::free_space(Extent *extent)
   avail_bytes_ += extent->size;
 }
 
-int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
+int FileSystem::Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
 {
   // easy: nothing to do
   if (in->i_st.st_size == newsize) {
@@ -1052,7 +1060,7 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
  * Allocate storage space for a file. The space should be available at file
  * offset @offset, and be no larger than @size bytes.
  */
-int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
+int FileSystem::allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
     off_t offset, size_t size, bool upper_bound)
 {
   // cap allocation size at 1mb, and if it isn't just filling a hole, then
@@ -1074,7 +1082,7 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
   return 0;
 }
 
-ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *buf)
+ssize_t FileSystem::Write(RegInode::Ptr in, off_t offset, size_t size, const char *buf)
 {
   auto now = std::time(nullptr);
   in->i_st.st_ctime = now;

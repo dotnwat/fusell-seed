@@ -30,7 +30,7 @@ Inode::Inode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
  * are no other open file handles. Otherwise, space is only freed after the
  * file is deleted and the kernel releases its references.
  */
-Inode::~Inode()
+RegInode::~RegInode()
 {
   for (auto it = extents_.begin(); it != extents_.end(); it++)
     fs_->free_space(&it->second);
@@ -49,6 +49,11 @@ fuse_ino_t Inode::ino() const
 {
   assert(ino_set_);
   return ino_;
+}
+
+bool Inode::is_regular() const
+{
+  return i_st.st_mode & S_IFREG;
 }
 
 bool Inode::is_directory() const
