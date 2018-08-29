@@ -42,3 +42,6 @@ target_include_directories(main PRIVATE ${FUSE_INCLUDE_DIRS})
 target_link_libraries(main ${FUSE_LIBRARIES})
 target_compile_options(main PRIVATE ${FUSE_CFLAGS})
 target_compile_definitions(main PRIVATE FUSE_USE_VERSION=30)
+
+enable_testing()
+add_subdirectory(test)
