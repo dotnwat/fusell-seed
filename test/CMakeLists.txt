@@ -8,3 +8,4 @@ endfunction()
 
 add_fs_test(postgres postgres.sh)
 add_fs_test(kernel kernel.sh)
+add_fs_test(bamsort bamsort.sh)
