@@ -18,7 +18,7 @@ function cleanup() {
 trap "cleanup" EXIT
 
 retries=5
-until findmnt -M ${dir} -t fuse.main; do
+until findmnt -t fuse.main ${dir}; do
   retries=$((${retries} - 1))
   [[ ${retries} -gt 0 ]] || exit 1
   echo "waiting... ${retries}"
