@@ -1,34 +1,6 @@
 #include "inode_index.h"
 #include <cassert>
 
-void InodeIndex::add(Inode::Ptr inode)
-{
-  assert(refs_.find(inode->ino()) == refs_.end());
-  refs_[inode->ino()] = std::make_pair(1, inode);
-}
-
-void InodeIndex::get(Inode::Ptr inode)
-{
-  auto it = refs_.find(inode->ino());
-  if (it == refs_.end())
-    refs_[inode->ino()] = std::make_pair(1, inode);
-  else {
-    assert(it->second.first > 0);
-    it->second.first++;
-  }
-}
-
-void InodeIndex::put(fuse_ino_t ino, long int dec)
-{
-  auto it = refs_.find(ino);
-  assert(it != refs_.end());
-  assert(it->second.first > 0);
-  it->second.first -= dec;
-  assert(it->second.first >= 0);
-  if (it->second.first == 0)
-    refs_.erase(it);
-}
-
 Inode::Ptr InodeIndex::inode(fuse_ino_t ino)
 {
   return refs_.at(ino).second;

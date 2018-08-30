@@ -22,35 +22,41 @@ class Inode {
  public:
   typedef std::shared_ptr<Inode> Ptr;
 
-  Inode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
+  Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
       mode_t mode, FileSystem *fs);
-  virtual ~Inode();
+  virtual ~Inode() {}
 
-  void set_ino(fuse_ino_t ino);
-  fuse_ino_t ino() const;
+  const fuse_ino_t ino;
 
   struct stat i_st;
 
+  bool is_regular() const;
   bool is_directory() const;
   bool is_symlink() const;
 
-  std::map<off_t, Extent> extents_;
-
- private:
-  bool ino_set_;
-  fuse_ino_t ino_;
+ protected:
   FileSystem *fs_;
 };
 
-// TODO: specialize for regular file
+class RegInode : public Inode {
+ public:
+  typedef std::shared_ptr<RegInode> Ptr;
+  RegInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
+      mode_t mode, FileSystem *fs) :
+    Inode(ino, time, uid, gid, blksize, mode, fs) {
+      i_st.st_mode = S_IFREG | mode;
+    }
+  ~RegInode();
+  std::map<off_t, Extent> extents_;
+};
 
 class DirInode : public Inode {
  public:
   typedef std::shared_ptr<DirInode> Ptr;
   typedef std::map<std::string, Inode::Ptr> dir_t;
-  DirInode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
+  DirInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
       mode_t mode, FileSystem *fs) :
-    Inode(time, uid, gid, blksize, mode, fs) {
+    Inode(ino, time, uid, gid, blksize, mode, fs) {
       i_st.st_nlink = 2;
       i_st.st_mode = S_IFDIR | mode;
       i_st.st_blocks = 1;
@@ -61,9 +67,9 @@ class DirInode : public Inode {
 class SymlinkInode : public Inode {
  public:
   typedef std::shared_ptr<SymlinkInode> Ptr;
-  SymlinkInode(time_t time, uid_t uid, gid_t gid, blksize_t blksize,
+  SymlinkInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
       const std::string& link, FileSystem *fs) :
-    Inode(time, uid, gid, blksize, 0, fs) {
+    Inode(ino, time, uid, gid, blksize, 0, fs) {
       i_st.st_mode = S_IFLNK;
       this->link = link;
       i_st.st_size = link.length();

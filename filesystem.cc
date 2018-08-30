@@ -9,14 +9,12 @@
 #include "inode.h"
 
 FileSystem::FileSystem(size_t size) :
-  next_ino_(FUSE_ROOT_ID + 1)
+  next_ino_(FUSE_ROOT_ID)
 {
   auto now = std::time(nullptr);
 
-  auto root = std::make_shared<DirInode>(now,
+  auto root = std::make_shared<DirInode>(next_ino_++, now,
       getuid(), getgid(), 4096, 0755, this);
-
-  root->set_ino(FUSE_ROOT_ID);
 
   // bump kernel inode cache reference count
   ino_refs_.add(root);
@@ -33,6 +31,12 @@ FileSystem::FileSystem(size_t size) :
   stat.f_files = 0;
   stat.f_bfree = stat.f_blocks;
   stat.f_bavail = stat.f_blocks;
+
+  auto console = spdlog::stdout_color_mt("console");
+
+  if (!next_ino_.is_always_lock_free) {
+    console->warn("inode number allocation may not be lock free");
+  }
 }
 
 int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
@@ -43,8 +47,8 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<Inode>(now, uid, gid, 4096, S_IFREG | mode, this);
-  auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
+  auto in = std::make_shared<RegInode>(next_ino_++, now, uid, gid, 4096, S_IFREG | mode, this);
+  auto fh = std::make_unique<FileHandle>(in, flags);
 
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -56,8 +60,6 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);
@@ -153,8 +155,10 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto in = ino_refs_.inode(ino);
-  auto fh = std::unique_ptr<FileHandle>(new FileHandle(in, flags));
+  auto generic_in = ino_refs_.inode(ino);
+  auto in = std::dynamic_pointer_cast<RegInode>(generic_in);
+  assert(in->is_regular());
+  auto fh = std::make_unique<FileHandle>(in, flags);
 
   int ret = Access(in, mode, uid, gid);
   if (ret)
@@ -193,7 +197,9 @@ ssize_t FileSystem::Write(FileHandle *fh, off_t offset, size_t size, const char 
   std::lock_guard<std::mutex> l(mutex_);
 
   Inode::Ptr in = fh->in;
-  ssize_t ret = Write(in, offset, size, buf);
+  assert(in->is_regular());
+  auto reg_in = std::dynamic_pointer_cast<RegInode>(in);
+  ssize_t ret = Write(reg_in, offset, size, buf);
   if (ret > 0)
     fh->pos += ret;
 
@@ -205,7 +211,9 @@ ssize_t FileSystem::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = fh->in;
+  Inode::Ptr gen_in = fh->in;
+  assert(gen_in->is_regular());
+  auto in = std::dynamic_pointer_cast<RegInode>(gen_in);
 
   size_t written = 0;
 
@@ -244,7 +252,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = fh->in;
+  RegInode::Ptr in = std::dynamic_pointer_cast<RegInode>(fh->in);
 
   in->i_st.st_atime = std::time(nullptr);
 
@@ -339,7 +347,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<DirInode>(now, uid, gid, 4096, mode, this);
+  auto in = std::make_shared<DirInode>(next_ino_++, now, uid, gid, 4096, mode, this);
 
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -351,8 +359,6 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);
@@ -600,7 +606,9 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
     if (attr->st_size > 2199023255552)
       return -EFBIG;
 
-    int ret = Truncate(in, attr->st_size, uid, gid);
+    assert(in->is_regular());
+    auto reg_in = std::dynamic_pointer_cast<RegInode>(in);
+    int ret = Truncate(reg_in, attr->st_size, uid, gid);
     if (ret < 0)
       return ret;
 
@@ -625,7 +633,7 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<SymlinkInode>(now, uid, gid, 4096, link, this);
+  auto in = std::make_shared<SymlinkInode>(next_ino_++, now, uid, gid, 4096, link, this);
 
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -637,8 +645,6 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);
@@ -807,7 +813,7 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<Inode>(now, uid, gid, 4096, mode, this);
+  auto in = std::make_shared<Inode>(next_ino_++, now, uid, gid, 4096, mode, this);
 
   // directories start with nlink = 2, but according to mknod(2), "Under
   // Linux, mknod() cannot be used to create directories.  One should make
@@ -824,8 +830,6 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   int ret = Access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
-
-  in->set_ino(next_ino_++);
 
   children[name] = in;
   ino_refs_.add(in);
@@ -932,7 +936,7 @@ void FileSystem::free_space(Extent *extent)
   avail_bytes_ += extent->size;
 }
 
-int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
+int FileSystem::Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
 {
   // easy: nothing to do
   if (in->i_st.st_size == newsize) {
@@ -1052,7 +1056,7 @@ int FileSystem::Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
  * Allocate storage space for a file. The space should be available at file
  * offset @offset, and be no larger than @size bytes.
  */
-int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
+int FileSystem::allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
     off_t offset, size_t size, bool upper_bound)
 {
   // cap allocation size at 1mb, and if it isn't just filling a hole, then
@@ -1074,7 +1078,7 @@ int FileSystem::allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator 
   return 0;
 }
 
-ssize_t FileSystem::Write(Inode::Ptr in, off_t offset, size_t size, const char *buf)
+ssize_t FileSystem::Write(RegInode::Ptr in, off_t offset, size_t size, const char *buf)
 {
   auto now = std::time(nullptr);
   in->i_st.st_ctime = now;

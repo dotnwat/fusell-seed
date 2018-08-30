@@ -1,4 +1,6 @@
 CMakeCache.txt
+CTestTestfile.cmake
+Testing
 CMakeFiles/
 cmake_install.cmake
 compile_commands.json

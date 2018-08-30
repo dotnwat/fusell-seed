@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <string>
@@ -10,6 +11,8 @@
 #include "inode.h"
 #include "file_handle.h"
 #include "inode_index.h"
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
 
 class FileSystem {
  public:
@@ -83,12 +86,13 @@ class FileSystem {
   void free_space(Extent *extent);
 
  private:
-  int Truncate(Inode::Ptr in, off_t newsize, uid_t uid, gid_t gid);
-  ssize_t Write(Inode::Ptr in, off_t offset, size_t size, const char *buf);
-  int allocate_space(Inode::Ptr in, std::map<off_t, Extent>::iterator *it,
+  int Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid);
+  ssize_t Write(RegInode::Ptr in, off_t offset, size_t size, const char *buf);
+  int allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
       off_t offset, size_t size, bool upper_bound);
 
-  fuse_ino_t next_ino_;
+  std::atomic<fuse_ino_t> next_ino_;
+
   std::mutex mutex_;
   struct statvfs stat;
 

@@ -39,19 +39,6 @@ The set of tests can be found in the `test/` directory. A selection:
 * Build PostgreSQL and run tests (test/postgres.sh)
 * Build Git and run unit tests (test/git.sh)
 
-The following set of distributions are tested using TravisCI:
-
-| Distribution     | Status |
-| ------------     | ------ |
-| macOS            | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=OSX_BUILD=1&label=macOS)](https://travis-ci.org/noahdesu/fusell-seed) |
-| CentOS 7         | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=DOCKER_IMAGE=centos:7&label=centos:7)](https://travis-ci.org/noahdesu/fusell-seed) |
-| Debian Jessie    | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=DOCKER_IMAGE=debian:jessie&label=debian:jessie)](https://travis-ci.org/noahdesu/fusell-seed) |
-| Ubuntu 14.04 LTS | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=DOCKER_IMAGE=ubuntu:trusty&label=ubuntu:trusty)](https://travis-ci.org/noahdesu/fusell-seed) |
-| Ubuntu 16.04 LTS | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=DOCKER_IMAGE=ubuntu:xenial&label=ubuntu:xenial)](https://travis-ci.org/noahdesu/fusell-seed) |
-| Fedora 23        | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=DOCKER_IMAGE=fedora:23&label=fedora:23)](https://travis-ci.org/noahdesu/fusell-seed) |
-| Fedora 24        | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=DOCKER_IMAGE=fedora:24&label=fedora:24)](https://travis-ci.org/noahdesu/fusell-seed) |
-| Fedora 25        | [![status](https://badges.herokuapp.com/travis/noahdesu/fusell-seed?env=DOCKER_IMAGE=fedora:25&label=fedora:25)](https://travis-ci.org/noahdesu/fusell-seed) |
-
 # Notes
 
 [nwatkins@kyoto fusell-seed]$ ./main mount -o fsname=fusell -o allow_other -o atomic_o_trunc

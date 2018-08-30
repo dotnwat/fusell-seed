@@ -1,5 +1,6 @@
 #pragma once
 #include <unordered_map>
+#include <cassert>
 #include <fuse.h>
 #include "inode.h"
 
@@ -15,16 +16,34 @@ class InodeIndex {
    * insert an inode into the index. this is the same as `get` but asserts
    * that the inode is not in the index. reference counts start at one.
    */
-  void add(Inode::Ptr inode);
+  void add(const std::shared_ptr<Inode>& inode) {
+    auto ret = refs_.emplace(inode->ino, std::make_pair(1, inode));
+    assert(ret.second);
+  }
 
   /*
    * increase the reference count on an inode. if the inode isn't present in
    * the index it is added with an initial count of one.
    */
-  void get(Inode::Ptr inode);
+  void get(const std::shared_ptr<Inode>& inode) {
+    auto ret = refs_.emplace(inode->ino, std::make_pair(1, inode));
+    if (!ret.second) {
+      assert(ret.first->second.first > 0);
+      ret.first->second.first++;
+    }
+  }
 
   // decrease the reference count by given amount.
-  void put(fuse_ino_t ino, long int dec);
+  void put(fuse_ino_t ino, long int dec) {
+    auto it = refs_.find(ino);
+    assert(it != refs_.end());
+    assert(it->second.first > 0);
+    it->second.first -= dec;
+    assert(it->second.first >= 0);
+    if (it->second.first == 0) {
+      refs_.erase(it);
+    }
+  }
 
   // lookup inodes by type
   Inode::Ptr inode(fuse_ino_t ino);

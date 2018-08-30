@@ -2,19 +2,18 @@
 set -e
 set -x
 
-DIR=linux-4.4.3
-curl -O https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.4.3.tar.xz
-tar xf linux-4.4.3.tar.xz
-pushd $DIR
+VERSION=4.18.5
 
-make allmodconfig
-make -j20
-make distclean
+curl -O https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-${VERSION}.tar.xz
+tar xf linux-${VERSION}.tar.xz
 
-make allyesconfig
-make -j20
+DIR=linux-${VERSION}
+pushd ${DIR}
+
+make tinyconfig
+make -j$(nproc)
 make distclean
 
 popd
 rm -rf $DIR
-rm linux-4.4.3.tar.xz
+rm linux-${VERSION}.tar.xz
