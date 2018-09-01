@@ -72,7 +72,6 @@ static void ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
   fuse_reply_none(req);
 }
 
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 void ll_forget_multi(fuse_req_t req, size_t count,
     struct fuse_forget_data *forgets)
 {
@@ -85,7 +84,6 @@ void ll_forget_multi(fuse_req_t req, size_t count,
 
   fuse_reply_none(req);
 }
-#endif
 
 static void ll_getattr(fuse_req_t req, fuse_ino_t ino,
     struct fuse_file_info *fi)
@@ -177,7 +175,6 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino,
   }
 }
 
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 static void ll_write_buf(fuse_req_t req, fuse_ino_t ino,
     struct fuse_bufvec *bufv, off_t off,
     struct fuse_file_info *fi)
@@ -191,20 +188,6 @@ static void ll_write_buf(fuse_req_t req, fuse_ino_t ino,
   else
     fuse_reply_err(req, -ret);
 }
-#else
-static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
-    size_t size, off_t off, struct fuse_file_info *fi)
-{
-  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
-  auto fh = reinterpret_cast<FileHandle*>(fi->fh);
-
-  ssize_t ret = fs->write(fh, off, size, buf);
-  if (ret >= 0)
-    fuse_reply_write(req, ret);
-  else
-    fuse_reply_err(req, -ret);
-}
-#endif
 
 static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     struct fuse_file_info *fi)
@@ -380,13 +363,11 @@ static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
     off_t offset, off_t length, struct fuse_file_info *fi)
 {
   fuse_reply_err(req, 0);
 }
-#endif
 
 enum {
   KEY_HELP,
@@ -456,52 +437,33 @@ int main(int argc, char *argv[])
   // Operation registry
   struct fuse_lowlevel_ops ll_oper;
   std::memset(&ll_oper, 0, sizeof(ll_oper));
-  ll_oper.destroy     = ll_destroy;
-  ll_oper.lookup      = ll_lookup;
-  ll_oper.getattr     = ll_getattr;
-  ll_oper.opendir     = ll_opendir;
-  ll_oper.readdir     = ll_readdir;
-  ll_oper.releasedir  = ll_releasedir;
-  ll_oper.open        = ll_open;
-  ll_oper.read        = ll_read;
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
-# define USING_WRITE_BUF
-  ll_oper.write_buf   = ll_write_buf;
-#else
-  ll_oper.write       = ll_write;
-#endif
-  ll_oper.create      = ll_create;
-  ll_oper.release     = ll_release;
-  ll_oper.unlink      = ll_unlink;
-  ll_oper.mkdir       = ll_mkdir;
-  ll_oper.rmdir       = ll_rmdir;
-  ll_oper.rename      = ll_rename;
-  ll_oper.setattr     = ll_setattr;
-  ll_oper.symlink     = ll_symlink;
-  ll_oper.readlink    = ll_readlink;
-  ll_oper.fsync       = ll_fsync;
-  ll_oper.fsyncdir    = ll_fsyncdir;
-  ll_oper.statfs      = ll_statfs;
-  ll_oper.link        = ll_link;
-  ll_oper.access      = ll_access;
-  ll_oper.mknod       = ll_mknod;
-  ll_oper.forget      = ll_forget;
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
-  ll_oper.forget_multi = ll_forget_multi;
-  ll_oper.fallocate   = ll_fallocate;
-#endif
-
-  /*
-   *
-   */
-  std::cout << "write interface: ";
-#ifdef USING_WRITE_BUF
-  std::cout << "write_buf";
-#else
-  std::cout << "write";
-#endif
-  std::cout << std::endl;
-  fflush(stdout); // FIXME: std::abc version?
+  ll_oper.destroy        = ll_destroy;
+  ll_oper.lookup         = ll_lookup;
+  ll_oper.getattr        = ll_getattr;
+  ll_oper.opendir        = ll_opendir;
+  ll_oper.readdir        = ll_readdir;
+  ll_oper.releasedir     = ll_releasedir;
+  ll_oper.open           = ll_open;
+  ll_oper.read           = ll_read;
+  ll_oper.write_buf      = ll_write_buf;
+  ll_oper.create         = ll_create;
+  ll_oper.release        = ll_release;
+  ll_oper.unlink         = ll_unlink;
+  ll_oper.mkdir          = ll_mkdir;
+  ll_oper.rmdir          = ll_rmdir;
+  ll_oper.rename         = ll_rename;
+  ll_oper.setattr        = ll_setattr;
+  ll_oper.symlink        = ll_symlink;
+  ll_oper.readlink       = ll_readlink;
+  ll_oper.fsync          = ll_fsync;
+  ll_oper.fsyncdir       = ll_fsyncdir;
+  ll_oper.statfs         = ll_statfs;
+  ll_oper.link           = ll_link;
+  ll_oper.access         = ll_access;
+  ll_oper.mknod          = ll_mknod;
+  ll_oper.forget         = ll_forget;
+  ll_oper.forget_multi   = ll_forget_multi;
+  ll_oper.fallocate      = ll_fallocate;
 
   FileSystem fs(opts.size, console);
 

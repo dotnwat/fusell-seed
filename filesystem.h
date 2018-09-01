@@ -48,11 +48,7 @@ class FileSystem {
 
   void forget(fuse_ino_t ino, long unsigned nlookup);
 
-  ssize_t write(FileHandle *fh, off_t offset, size_t size, const char *buf);
-
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
   ssize_t write_buf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off);
-#endif
 
   ssize_t read(FileHandle *fh, off_t offset, size_t size, char *buf);
 

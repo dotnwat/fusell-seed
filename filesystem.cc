@@ -259,19 +259,6 @@ void FileSystem::forget(fuse_ino_t ino, long unsigned nlookup)
   PutInode(ino, nlookup);
 }
 
-ssize_t FileSystem::write(FileHandle *fh, off_t offset, size_t size, const char *buf)
-{
-  std::lock_guard<std::mutex> l(mutex_);
-
-  Inode::Ptr in = fh->in;
-  assert(in->is_regular());
-  auto reg_in = std::dynamic_pointer_cast<RegInode>(in);
-  ssize_t ret = write(reg_in, offset, size, buf);
-
-  return ret;
-}
-
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 ssize_t FileSystem::write_buf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off)
 {
   std::lock_guard<std::mutex> l(mutex_);
@@ -310,7 +297,6 @@ ssize_t FileSystem::write_buf(FileHandle *fh, struct fuse_bufvec *bufv, off_t of
 
   return written;
 }
-#endif
 
 ssize_t FileSystem::read(FileHandle *fh, off_t offset,
     size_t size, char *buf)
