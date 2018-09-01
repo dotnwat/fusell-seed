@@ -396,7 +396,7 @@ struct filesystem_opts {
 #define FS_OPT(t, p, v) { t, offsetof(struct filesystem_opts, p), v }
 
 static struct fuse_opt fs_fuse_opts[] = {
-  FS_OPT("size=%u",              size, 0),
+  FS_OPT("size=%llu",              size, 0),
   FUSE_OPT_KEY("-h",             KEY_HELP),
   FUSE_OPT_KEY("--help",         KEY_HELP),
   FUSE_OPT_END

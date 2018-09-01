@@ -34,6 +34,21 @@ FileSystem::FileSystem(size_t size) :
 
   console_ = spdlog::stdout_color_mt("console");
 
+  if (size < 1ULL<<20) {
+    console_->info("creating {} byte file system", size);
+  } else if (size < 1ULL<<30) {
+    auto mbs = size / (1ULL<<20);
+    console_->info("creating {} mb file system", mbs);
+  } else if (size < 1ULL<<40) {
+    auto gbs = size / (1ULL<<30);
+    console_->info("creating {} gb file system", gbs);
+  } else if (size < 1ULL<<50) {
+    auto tbs = size / (1ULL<<40);
+    console_->info("creating {} tb file system", tbs);
+  } else {
+    assert(0 == "oh yeh?");
+  }
+
   if (!next_ino_.is_always_lock_free) {
     console_->warn("inode number allocation may not be lock free");
   }

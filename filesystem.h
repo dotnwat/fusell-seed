@@ -30,6 +30,8 @@ class FileSystem {
   FileSystem& operator=(const FileSystem& other) = delete;
   FileSystem& operator=(const FileSystem&& other) = delete;
 
+  // fuse methods
+ public:
   void Destroy();
 
   int Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
