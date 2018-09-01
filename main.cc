@@ -15,6 +15,9 @@
 
 #include "filesystem.h"
 
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
+
 static void ll_destroy(void *userdata)
 {
   auto fs = reinterpret_cast<FileSystem*>(userdata);
@@ -436,6 +439,8 @@ int main(int argc, char *argv[])
 
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
+  auto console = spdlog::stdout_color_mt("console");
+
   if (fuse_opt_parse(&args, &opts, fs_fuse_opts, fs_opt_proc) == -1) {
     exit(1);
   }
@@ -497,7 +502,7 @@ int main(int argc, char *argv[])
   std::cout << std::endl;
   fflush(stdout); // FIXME: std::abc version?
 
-  FileSystem fs(opts.size);
+  FileSystem fs(opts.size, console);
 
   if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
       (ch = fuse_mount(mountpoint, &args)) != NULL) {

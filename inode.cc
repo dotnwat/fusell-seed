@@ -28,8 +28,9 @@ Inode::Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksiz
 }
 
 Inode::~Inode() {
-  if (krefs != 0 && !fs_->shutting_down) {
+  if (krefs != 0) {
     std::cerr << "inode " << ino << " freed with kref " << krefs << std::endl;
+    assert(0);
   }
 }
 

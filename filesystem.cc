@@ -8,8 +8,9 @@
 #include <unistd.h>
 #include "inode.h"
 
-FileSystem::FileSystem(size_t size) :
-  next_ino_(FUSE_ROOT_ID)
+FileSystem::FileSystem(size_t size,
+    const std::shared_ptr<spdlog::logger>& log) :
+  next_ino_(FUSE_ROOT_ID), log_(log)
 {
   auto now = std::time(nullptr);
 
@@ -32,25 +33,23 @@ FileSystem::FileSystem(size_t size) :
   stat.f_bfree = stat.f_blocks;
   stat.f_bavail = stat.f_blocks;
 
-  console_ = spdlog::stdout_color_mt("console");
-
   if (size < 1ULL<<20) {
-    console_->info("creating {} byte file system", size);
+    log_->info("creating {} byte file system", size);
   } else if (size < 1ULL<<30) {
     auto mbs = size / (1ULL<<20);
-    console_->info("creating {} mb file system", mbs);
+    log_->info("creating {} mb file system", mbs);
   } else if (size < 1ULL<<40) {
     auto gbs = size / (1ULL<<30);
-    console_->info("creating {} gb file system", gbs);
+    log_->info("creating {} gb file system", gbs);
   } else if (size < 1ULL<<50) {
     auto tbs = size / (1ULL<<40);
-    console_->info("creating {} tb file system", tbs);
+    log_->info("creating {} tb file system", tbs);
   } else {
     assert(0 == "oh yeh?");
   }
 
   if (!next_ino_.is_always_lock_free) {
-    console_->warn("inode number allocation may not be lock free");
+    log_->warn("inode number allocation may not be lock free");
   }
 }
 
@@ -96,8 +95,10 @@ uint64_t FileSystem::nfiles() const
 
 void FileSystem::Destroy()
 {
-  console_->info("destroying file system");
-  shutting_down = true;
+  log_->info("destroying file system");
+  for (auto in : inodes_) {
+    in.second->krefs = 0;
+  }
 }
 
 int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
@@ -189,12 +190,12 @@ int FileSystem::Lookup(fuse_ino_t parent_ino, const std::string& name, struct st
   auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t::const_iterator it = parent_in->dentries.find(name);
   if (it == parent_in->dentries.end()) {
-    console_->warn("lookup parent {} name {} not found", parent_ino, name);
+    log_->warn("lookup parent {} name {} not found", parent_ino, name);
     return -ENOENT;
   }
 
   auto in = it->second;
-  console_->warn("lookup parent {} name {} found {}", parent_ino, name, in->ino);
+  log_->warn("lookup parent {} name {} found {}", parent_ino, name, in->ino);
 
   // bump kernel inode cache reference count
   GetInode(in);
@@ -250,7 +251,7 @@ void FileSystem::Release(fuse_ino_t ino, FileHandle *fh)
 
 void FileSystem::Forget(fuse_ino_t ino, long unsigned nlookup)
 {
-  console_->warn("forget ino {} nlookup {}", ino, nlookup);
+  log_->warn("forget ino {} nlookup {}", ino, nlookup);
 
   std::lock_guard<std::mutex> l(mutex_);
 

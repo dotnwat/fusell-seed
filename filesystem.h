@@ -10,7 +10,6 @@
 #include <fuse_lowlevel.h>
 #include "inode.h"
 #include "spdlog/spdlog.h"
-#include "spdlog/sinks/stdout_color_sinks.h"
 
 struct FileHandle {
   std::shared_ptr<RegInode> in;
@@ -23,7 +22,7 @@ struct FileHandle {
 
 class FileSystem {
  public:
-  explicit FileSystem(size_t size);
+  FileSystem(size_t size, const std::shared_ptr<spdlog::logger>& log);
 
   FileSystem(const FileSystem& other) = delete;
   FileSystem(FileSystem&& other) = delete;
@@ -96,8 +95,6 @@ class FileSystem {
 
   void free_space(Extent *extent);
 
-  std::atomic<bool> shutting_down = false;
-
  private:
   int Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid);
   ssize_t Write(RegInode::Ptr in, off_t offset, size_t size, const char *buf);
@@ -134,5 +131,5 @@ class FileSystem {
     return std::static_pointer_cast<SymlinkInode>(in);
   }
 
-  std::shared_ptr<spdlog::logger> console_;
+  std::shared_ptr<spdlog::logger> log_;
 };
