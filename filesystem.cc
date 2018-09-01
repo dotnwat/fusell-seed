@@ -8,6 +8,15 @@
 #include <unistd.h>
 #include "inode.h"
 
+struct FileHandle {
+  std::shared_ptr<RegInode> in;
+  int flags;
+
+  FileHandle(RegInode::Ptr in, int flags) :
+    in(in), flags(flags)
+  {}
+};
+
 FileSystem::FileSystem(size_t size,
     const std::shared_ptr<spdlog::logger>& log) :
   next_ino_(FUSE_ROOT_ID), log_(log)

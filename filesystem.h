@@ -11,14 +11,7 @@
 #include "inode.h"
 #include "spdlog/spdlog.h"
 
-struct FileHandle {
-  std::shared_ptr<RegInode> in;
-  int flags;
-
-  FileHandle(RegInode::Ptr in, int flags) :
-    in(in), flags(flags)
-  {}
-};
+struct FileHandle;
 
 class FileSystem {
  public:
@@ -26,72 +19,75 @@ class FileSystem {
 
   FileSystem(const FileSystem& other) = delete;
   FileSystem(FileSystem&& other) = delete;
+  ~FileSystem() = default;
   FileSystem& operator=(const FileSystem& other) = delete;
   FileSystem& operator=(const FileSystem&& other) = delete;
 
-  // fuse methods
  public:
   void destroy();
-
-  int create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
-      int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid);
-
-  int getattr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid);
-
-  int unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid, gid_t gid);
-
   int lookup(fuse_ino_t parent_ino, const std::string& name, struct stat *st);
-
-  int open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid_t gid);
-
-  void release(fuse_ino_t ino, FileHandle *fh);
-
   void forget(fuse_ino_t ino, long unsigned nlookup);
+  int statfs(fuse_ino_t ino, struct statvfs *stbuf);
 
-  ssize_t write_buf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off);
+  // TODO: get rid of this method
+  void free_space(Extent *extent);
 
-  ssize_t read(FileHandle *fh, off_t offset, size_t size, char *buf);
+  // inode operations
+ public:
+  int mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+      dev_t rdev, struct stat *st, uid_t uid, gid_t gid);
 
-  int mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
-      struct stat *st, uid_t uid, gid_t gid);
+  int symlink(const std::string& link, fuse_ino_t parent_ino,
+      const std::string& name, struct stat *st, uid_t uid, gid_t gid);
 
-  int rmdir(fuse_ino_t parent_ino, const std::string& name,
+  int link(fuse_ino_t ino, fuse_ino_t newparent_ino,
+      const std::string& newname, struct stat *st,
       uid_t uid, gid_t gid);
 
   int rename(fuse_ino_t parent_ino, const std::string& name,
       fuse_ino_t newparent_ino, const std::string& newname,
       uid_t uid, gid_t gid);
 
-  int setattr(fuse_ino_t ino, FileHandle *fh, struct stat *attr, int to_set,
+  int unlink(fuse_ino_t parent_ino, const std::string& name,
       uid_t uid, gid_t gid);
-
-  int symlink(const std::string& link, fuse_ino_t parent_ino,
-      const std::string& name, struct stat *st, uid_t uid, gid_t gid);
-
-  ssize_t readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t uid, gid_t gid);
-
-  int statfs(fuse_ino_t ino, struct statvfs *stbuf);
-
-  int link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string& newname,
-      struct stat *st, uid_t uid, gid_t gid);
-
-  int access(Inode::Ptr in, int mask, uid_t uid, gid_t gid);
 
   int access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid);
 
-  int mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
-      dev_t rdev, struct stat *st, uid_t uid, gid_t gid);
+  int getattr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid);
+
+  int setattr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
+      int to_set, uid_t uid, gid_t gid);
+
+  ssize_t readlink(fuse_ino_t ino, char *path, size_t maxlen,
+      uid_t uid, gid_t gid);
+
+  // directory operations
+ public:
+  int mkdir(fuse_ino_t parent_ino, const std::string& name,
+      mode_t mode, struct stat *st, uid_t uid, gid_t gid);
 
   int opendir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid);
 
   ssize_t readdir(fuse_req_t req, fuse_ino_t ino, char *buf,
       size_t bufsize, off_t off);
 
+  int rmdir(fuse_ino_t parent_ino, const std::string& name,
+      uid_t uid, gid_t gid);
+
   void releasedir(fuse_ino_t ino);
 
-  void free_space(Extent *extent);
+  // file handle operation
+ public:
+  int create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+      int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid);
+
+  int open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid_t gid);
+  ssize_t write_buf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off);
+  ssize_t read(FileHandle *fh, off_t offset, size_t size, char *buf);
+  void release(fuse_ino_t ino, FileHandle *fh);
 
  private:
+  int access(Inode::Ptr in, int mask, uid_t uid, gid_t gid);
   int truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid);
   ssize_t write(RegInode::Ptr in, off_t offset, size_t size, const char *buf);
   int allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
