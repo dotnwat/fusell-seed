@@ -21,7 +21,7 @@
 static void ll_destroy(void *userdata)
 {
   auto fs = reinterpret_cast<FileSystem*>(userdata);
-  fs->Destroy();
+  fs->destroy();
 }
 
 static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
@@ -34,7 +34,7 @@ static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
   std::memset(&fe, 0, sizeof(fe));
 
   FileHandle *fh;
-  int ret = fs->Create(parent, name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
+  int ret = fs->create(parent, name, mode, fi->flags, &fe.attr, &fh, ctx->uid, ctx->gid);
   if (ret == 0) {
     fi->fh = reinterpret_cast<uint64_t>(fh);
     fe.ino = fe.attr.st_ino;
@@ -51,7 +51,7 @@ static void ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   auto fh = reinterpret_cast<FileHandle*>(fi->fh);
 
-  fs->Release(ino, fh);
+  fs->release(ino, fh);
   fuse_reply_err(req, 0);
 }
 
@@ -60,7 +60,7 @@ static void ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
-  int ret = fs->Unlink(parent, name, ctx->uid, ctx->gid);
+  int ret = fs->unlink(parent, name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -ret);
 }
 
@@ -68,11 +68,10 @@ static void ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
-  fs->Forget(ino, nlookup);
+  fs->forget(ino, nlookup);
   fuse_reply_none(req);
 }
 
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 void ll_forget_multi(fuse_req_t req, size_t count,
     struct fuse_forget_data *forgets)
 {
@@ -80,12 +79,11 @@ void ll_forget_multi(fuse_req_t req, size_t count,
 
   for (size_t i = 0; i < count; i++) {
     const struct fuse_forget_data *f = forgets + i;
-    fs->Forget(f->ino, f->nlookup);
+    fs->forget(f->ino, f->nlookup);
   }
 
   fuse_reply_none(req);
 }
-#endif
 
 static void ll_getattr(fuse_req_t req, fuse_ino_t ino,
     struct fuse_file_info *fi)
@@ -94,7 +92,7 @@ static void ll_getattr(fuse_req_t req, fuse_ino_t ino,
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
   struct stat st;
-  int ret = fs->GetAttr(ino, &st, ctx->uid, ctx->gid);
+  int ret = fs->getattr(ino, &st, ctx->uid, ctx->gid);
   if (ret == 0)
     fuse_reply_attr(req, &st, ret);
   else
@@ -108,7 +106,7 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   struct fuse_entry_param fe;
   std::memset(&fe, 0, sizeof(fe));
 
-  int ret = fs->Lookup(parent, name, &fe.attr);
+  int ret = fs->lookup(parent, name, &fe.attr);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fe.generation = 0;
@@ -124,7 +122,7 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino,
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
-  int ret = fs->OpenDir(ino, fi->flags, ctx->uid, ctx->gid);
+  int ret = fs->opendir(ino, fi->flags, ctx->uid, ctx->gid);
   if (ret == 0) {
     fuse_reply_open(req, fi);
   } else {
@@ -139,7 +137,7 @@ static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
   auto buf = std::unique_ptr<char[]>(new char[size]);
 
-  ssize_t ret = fs->ReadDir(req, ino, buf.get(), size, off);
+  ssize_t ret = fs->readdir(req, ino, buf.get(), size, off);
   if (ret >= 0) {
     fuse_reply_buf(req, buf.get(), (size_t)ret);
   } else {
@@ -153,7 +151,7 @@ static void ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 {
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
 
-  fs->ReleaseDir(ino);
+  fs->releasedir(ino);
   fuse_reply_err(req, 0);
 }
 
@@ -168,7 +166,7 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino,
   assert(!(fi->flags & O_CREAT));
 
   FileHandle *fh;
-  int ret = fs->Open(ino, fi->flags, &fh, ctx->uid, ctx->gid);
+  int ret = fs->open(ino, fi->flags, &fh, ctx->uid, ctx->gid);
   if (ret == 0) {
     fi->fh = reinterpret_cast<uint64_t>(fh);
     fuse_reply_open(req, fi);
@@ -177,7 +175,6 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino,
   }
 }
 
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 static void ll_write_buf(fuse_req_t req, fuse_ino_t ino,
     struct fuse_bufvec *bufv, off_t off,
     struct fuse_file_info *fi)
@@ -185,26 +182,12 @@ static void ll_write_buf(fuse_req_t req, fuse_ino_t ino,
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   auto fh = reinterpret_cast<FileHandle*>(fi->fh);
 
-  ssize_t ret = fs->WriteBuf(fh, bufv, off);
+  ssize_t ret = fs->write_buf(fh, bufv, off);
   if (ret >= 0)
     fuse_reply_write(req, ret);
   else
     fuse_reply_err(req, -ret);
 }
-#else
-static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
-    size_t size, off_t off, struct fuse_file_info *fi)
-{
-  auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
-  auto fh = reinterpret_cast<FileHandle*>(fi->fh);
-
-  ssize_t ret = fs->Write(fh, off, size, buf);
-  if (ret >= 0)
-    fuse_reply_write(req, ret);
-  else
-    fuse_reply_err(req, -ret);
-}
-#endif
 
 static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     struct fuse_file_info *fi)
@@ -214,7 +197,7 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 
   auto buf = std::unique_ptr<char[]>(new char[size]);
 
-  ssize_t ret = fs->Read(fh, off, size, buf.get());
+  ssize_t ret = fs->read(fh, off, size, buf.get());
   if (ret >= 0)
     fuse_reply_buf(req, buf.get(), ret);
   else
@@ -230,7 +213,7 @@ static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
   std::memset(&fe, 0, sizeof(fe));
 
-  int ret = fs->Mkdir(parent, name, mode, &fe.attr, ctx->uid, ctx->gid);
+  int ret = fs->mkdir(parent, name, mode, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fe.generation = 0;
@@ -246,7 +229,7 @@ static void ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
-  int ret = fs->Rmdir(parent, name, ctx->uid, ctx->gid);
+  int ret = fs->rmdir(parent, name, ctx->uid, ctx->gid);
   fuse_reply_err(req, -ret);
 }
 
@@ -256,7 +239,7 @@ static void ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
-  int ret = fs->Rename(parent, name, newparent, newname,
+  int ret = fs->rename(parent, name, newparent, newname,
       ctx->uid, ctx->gid);
   fuse_reply_err(req, -ret);
 }
@@ -268,7 +251,7 @@ static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
   auto fh = fi ? reinterpret_cast<FileHandle*>(fi->fh) : nullptr;
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
-  int ret = fs->SetAttr(ino, fh, attr, to_set, ctx->uid, ctx->gid);
+  int ret = fs->setattr(ino, fh, attr, to_set, ctx->uid, ctx->gid);
   if (ret == 0)
     fuse_reply_attr(req, attr, 0);
   else
@@ -281,7 +264,7 @@ static void ll_readlink(fuse_req_t req, fuse_ino_t ino)
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   char path[PATH_MAX + 1];
 
-  ssize_t ret = fs->Readlink(ino, path, sizeof(path) - 1, ctx->uid, ctx->gid);
+  ssize_t ret = fs->readlink(ino, path, sizeof(path) - 1, ctx->uid, ctx->gid);
   if (ret >= 0) {
     path[ret] = '\0';
     fuse_reply_readlink(req, path);
@@ -300,7 +283,7 @@ static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
   struct fuse_entry_param fe;
   std::memset(&fe, 0, sizeof(fe));
 
-  int ret = fs->Symlink(link, parent, name, &fe.attr, ctx->uid, ctx->gid);
+  int ret = fs->symlink(link, parent, name, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -328,7 +311,7 @@ static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
   struct statvfs stbuf;
   std::memset(&stbuf, 0, sizeof(stbuf));
 
-  int ret = fs->Statfs(ino, &stbuf);
+  int ret = fs->statfs(ino, &stbuf);
   if (ret == 0)
     fuse_reply_statfs(req, &stbuf);
   else
@@ -344,7 +327,7 @@ static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
   struct fuse_entry_param fe;
   std::memset(&fe, 0, sizeof(fe));
 
-  int ret = fs->Link(ino, newparent, newname, &fe.attr, ctx->uid, ctx->gid);
+  int ret = fs->link(ino, newparent, newname, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -358,7 +341,7 @@ static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
   auto fs = reinterpret_cast<FileSystem*>(fuse_req_userdata(req));
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
 
-  int ret = fs->Access(ino, mask, ctx->uid, ctx->gid);
+  int ret = fs->access(ino, mask, ctx->uid, ctx->gid);
   fuse_reply_err(req, -ret);
 }
 
@@ -371,7 +354,7 @@ static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   struct fuse_entry_param fe;
   std::memset(&fe, 0, sizeof(fe));
 
-  int ret = fs->Mknod(parent, name, mode, rdev, &fe.attr, ctx->uid, ctx->gid);
+  int ret = fs->mknod(parent, name, mode, rdev, &fe.attr, ctx->uid, ctx->gid);
   if (ret == 0) {
     fe.ino = fe.attr.st_ino;
     fuse_reply_entry(req, &fe);
@@ -380,13 +363,11 @@ static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
   }
 }
 
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
     off_t offset, off_t length, struct fuse_file_info *fi)
 {
   fuse_reply_err(req, 0);
 }
-#endif
 
 enum {
   KEY_HELP,
@@ -456,52 +437,33 @@ int main(int argc, char *argv[])
   // Operation registry
   struct fuse_lowlevel_ops ll_oper;
   std::memset(&ll_oper, 0, sizeof(ll_oper));
-  ll_oper.destroy     = ll_destroy;
-  ll_oper.lookup      = ll_lookup;
-  ll_oper.getattr     = ll_getattr;
-  ll_oper.opendir     = ll_opendir;
-  ll_oper.readdir     = ll_readdir;
-  ll_oper.releasedir  = ll_releasedir;
-  ll_oper.open        = ll_open;
-  ll_oper.read        = ll_read;
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
-# define USING_WRITE_BUF
-  ll_oper.write_buf   = ll_write_buf;
-#else
-  ll_oper.write       = ll_write;
-#endif
-  ll_oper.create      = ll_create;
-  ll_oper.release     = ll_release;
-  ll_oper.unlink      = ll_unlink;
-  ll_oper.mkdir       = ll_mkdir;
-  ll_oper.rmdir       = ll_rmdir;
-  ll_oper.rename      = ll_rename;
-  ll_oper.setattr     = ll_setattr;
-  ll_oper.symlink     = ll_symlink;
-  ll_oper.readlink    = ll_readlink;
-  ll_oper.fsync       = ll_fsync;
-  ll_oper.fsyncdir    = ll_fsyncdir;
-  ll_oper.statfs      = ll_statfs;
-  ll_oper.link        = ll_link;
-  ll_oper.access      = ll_access;
-  ll_oper.mknod       = ll_mknod;
-  ll_oper.forget      = ll_forget;
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
-  ll_oper.forget_multi = ll_forget_multi;
-  ll_oper.fallocate   = ll_fallocate;
-#endif
-
-  /*
-   *
-   */
-  std::cout << "write interface: ";
-#ifdef USING_WRITE_BUF
-  std::cout << "write_buf";
-#else
-  std::cout << "write";
-#endif
-  std::cout << std::endl;
-  fflush(stdout); // FIXME: std::abc version?
+  ll_oper.destroy        = ll_destroy;
+  ll_oper.lookup         = ll_lookup;
+  ll_oper.getattr        = ll_getattr;
+  ll_oper.opendir        = ll_opendir;
+  ll_oper.readdir        = ll_readdir;
+  ll_oper.releasedir     = ll_releasedir;
+  ll_oper.open           = ll_open;
+  ll_oper.read           = ll_read;
+  ll_oper.write_buf      = ll_write_buf;
+  ll_oper.create         = ll_create;
+  ll_oper.release        = ll_release;
+  ll_oper.unlink         = ll_unlink;
+  ll_oper.mkdir          = ll_mkdir;
+  ll_oper.rmdir          = ll_rmdir;
+  ll_oper.rename         = ll_rename;
+  ll_oper.setattr        = ll_setattr;
+  ll_oper.symlink        = ll_symlink;
+  ll_oper.readlink       = ll_readlink;
+  ll_oper.fsync          = ll_fsync;
+  ll_oper.fsyncdir       = ll_fsyncdir;
+  ll_oper.statfs         = ll_statfs;
+  ll_oper.link           = ll_link;
+  ll_oper.access         = ll_access;
+  ll_oper.mknod          = ll_mknod;
+  ll_oper.forget         = ll_forget;
+  ll_oper.forget_multi   = ll_forget_multi;
+  ll_oper.fallocate      = ll_fallocate;
 
   FileSystem fs(opts.size, console);
 

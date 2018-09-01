@@ -4,29 +4,6 @@
 #include <fuse.h>
 #include "filesystem.h"
 
-Inode::Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-    mode_t mode, FileSystem *fs) :
-  ino(ino), fs_(fs)
-{
-  memset(&i_st, 0, sizeof(i_st));
-
-  i_st.st_ino = ino;
-
-  i_st.st_atime = time;
-  i_st.st_mtime = time;
-  i_st.st_ctime = time;
-
-  i_st.st_uid = uid;
-  i_st.st_gid = gid;
-
-  i_st.st_blksize = blksize;
-
-  // DirInode will set this to 2
-  i_st.st_nlink = 1;
-  // Dir/Sym will set reset this
-  i_st.st_mode = mode;
-}
-
 Inode::~Inode() {
   if (krefs != 0) {
     std::cerr << "inode " << ino << " freed with kref " << krefs << std::endl;

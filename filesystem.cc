@@ -8,6 +8,15 @@
 #include <unistd.h>
 #include "inode.h"
 
+struct FileHandle {
+  std::shared_ptr<RegInode> in;
+  int flags;
+
+  FileHandle(std::shared_ptr<RegInode> in, int flags) :
+    in(in), flags(flags)
+  {}
+};
+
 FileSystem::FileSystem(size_t size,
     const std::shared_ptr<spdlog::logger>& log) :
   next_ino_(FUSE_ROOT_ID), log_(log)
@@ -93,7 +102,7 @@ uint64_t FileSystem::nfiles() const
   return ret;
 }
 
-void FileSystem::Destroy()
+void FileSystem::destroy()
 {
   log_->info("destroying file system");
   for (auto in : inodes_) {
@@ -101,7 +110,7 @@ void FileSystem::Destroy()
   }
 }
 
-int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+int FileSystem::create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -119,7 +128,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
   if (children.find(name) != children.end())
     return -EEXIST;
 
-  int ret = Access(parent_in, W_OK, uid, gid);
+  int ret = access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
@@ -135,7 +144,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
   return 0;
 }
 
-int FileSystem::GetAttr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid)
+int FileSystem::getattr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -146,7 +155,7 @@ int FileSystem::GetAttr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid)
   return 0;
 }
 
-int FileSystem::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid, gid_t gid)
+int FileSystem::unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -155,7 +164,7 @@ int FileSystem::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid
   if (it == parent_in->dentries.end())
     return -ENOENT;
 
-  int ret = Access(parent_in, W_OK, uid, gid);
+  int ret = access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
@@ -182,7 +191,7 @@ int FileSystem::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid
   return 0;
 }
 
-int FileSystem::Lookup(fuse_ino_t parent_ino, const std::string& name, struct stat *st)
+int FileSystem::lookup(fuse_ino_t parent_ino, const std::string& name, struct stat *st)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -205,7 +214,7 @@ int FileSystem::Lookup(fuse_ino_t parent_ino, const std::string& name, struct st
   return 0;
 }
 
-int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid_t gid)
+int FileSystem::open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid_t gid)
 {
   int mode = 0;
   if ((flags & O_ACCMODE) == O_RDONLY)
@@ -225,12 +234,12 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
   assert(in->is_regular());
   auto fh = std::make_unique<FileHandle>(in, flags);
 
-  int ret = Access(in, mode, uid, gid);
+  int ret = access(in, mode, uid, gid);
   if (ret)
     return ret;
 
   if (flags & O_TRUNC) {
-    ret = Truncate(in, 0, uid, gid);
+    ret = truncate(in, 0, uid, gid);
     if (ret)
       return ret;
     auto now = std::time(nullptr);
@@ -243,13 +252,13 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
   return 0;
 }
 
-void FileSystem::Release(fuse_ino_t ino, FileHandle *fh)
+void FileSystem::release(fuse_ino_t ino, FileHandle *fh)
 {
   assert(fh);
   delete fh;
 }
 
-void FileSystem::Forget(fuse_ino_t ino, long unsigned nlookup)
+void FileSystem::forget(fuse_ino_t ino, long unsigned nlookup)
 {
   log_->warn("forget ino {} nlookup {}", ino, nlookup);
 
@@ -259,24 +268,11 @@ void FileSystem::Forget(fuse_ino_t ino, long unsigned nlookup)
   PutInode(ino, nlookup);
 }
 
-ssize_t FileSystem::Write(FileHandle *fh, off_t offset, size_t size, const char *buf)
+ssize_t FileSystem::write_buf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = fh->in;
-  assert(in->is_regular());
-  auto reg_in = std::dynamic_pointer_cast<RegInode>(in);
-  ssize_t ret = Write(reg_in, offset, size, buf);
-
-  return ret;
-}
-
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
-ssize_t FileSystem::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off)
-{
-  std::lock_guard<std::mutex> l(mutex_);
-
-  Inode::Ptr gen_in = fh->in;
+  auto gen_in = fh->in;
   assert(gen_in->is_regular());
   auto in = std::dynamic_pointer_cast<RegInode>(gen_in);
 
@@ -291,14 +287,14 @@ ssize_t FileSystem::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off
 
     ssize_t ret;
     if (i == bufv->idx) {
-      ret = Write(in, off, buf->size - bufv->off, (char*)buf->mem + bufv->off);
+      ret = write(in, off, buf->size - bufv->off, (char*)buf->mem + bufv->off);
       if (ret < 0)
         return ret;
       assert(buf->size > bufv->off);
       if (ret < (ssize_t)(buf->size - bufv->off))
         return written;
     } else {
-      ret = Write(in, off, buf->size, (char*)buf->mem);
+      ret = write(in, off, buf->size, (char*)buf->mem);
       if (ret < 0)
         return ret;
       if (ret < (ssize_t)buf->size)
@@ -310,14 +306,13 @@ ssize_t FileSystem::WriteBuf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off
 
   return written;
 }
-#endif
 
-ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
+ssize_t FileSystem::read(FileHandle *fh, off_t offset,
     size_t size, char *buf)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  RegInode::Ptr in = std::dynamic_pointer_cast<RegInode>(fh->in);
+  std::shared_ptr<RegInode> in = std::dynamic_pointer_cast<RegInode>(fh->in);
 
   in->i_st.st_atime = std::time(nullptr);
 
@@ -401,7 +396,7 @@ ssize_t FileSystem::Read(FileHandle *fh, off_t offset,
   return new_size;
 }
 
-int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+int FileSystem::mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     struct stat *st, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -418,7 +413,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   if (children.find(name) != children.end())
     return -EEXIST;
 
-  int ret = Access(parent_in, W_OK, uid, gid);
+  int ret = access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
@@ -434,7 +429,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   return 0;
 }
 
-int FileSystem::Rmdir(fuse_ino_t parent_ino, const std::string& name,
+int FileSystem::rmdir(fuse_ino_t parent_ino, const std::string& name,
     uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
@@ -468,7 +463,7 @@ int FileSystem::Rmdir(fuse_ino_t parent_ino, const std::string& name,
   return 0;
 }
 
-int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
+int FileSystem::rename(fuse_ino_t parent_ino, const std::string& name,
     fuse_ino_t newparent_ino, const std::string& newname,
     uid_t uid, gid_t gid)
 {
@@ -484,7 +479,7 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
   if (old_it == parent_children.end())
     return -ENOENT;
 
-  Inode::Ptr old_in = old_it->second;
+  auto old_in = old_it->second;
   assert(old_in);
 
   // new
@@ -492,14 +487,14 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
   DirInode::dir_t& newparent_children = newparent_in->dentries;
   DirInode::dir_t::const_iterator new_it = newparent_children.find(newname);
 
-  Inode::Ptr new_in = NULL;
+  std::shared_ptr<Inode> new_in = NULL;
   if (new_it != newparent_children.end()) {
     new_in = new_it->second;
     assert(new_in);
   }
 
   /*
-   * EACCES Write permission is denied for the directory containing oldpath or
+   * EACCES write permission is denied for the directory containing oldpath or
    * newpath,
    *
    * (TODO) or search permission is denied for one of the directories in the
@@ -509,16 +504,16 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
    * to update the ..  entry).  (See also path_resolution(7).) TODO: this is
    * implemented but what is the affect on ".." update?
    */
-  int ret = Access(parent_in, W_OK, uid, gid);
+  int ret = access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
-  ret = Access(newparent_in, W_OK, uid, gid);
+  ret = access(newparent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
   if (old_in->i_st.st_mode & S_IFDIR) {
-    ret = Access(old_in, W_OK, uid, gid);
+    ret = access(old_in, W_OK, uid, gid);
     if (ret)
       return ret;
   }
@@ -577,13 +572,13 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
   return 0;
 }
 
-int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
+int FileSystem::setattr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
     int to_set, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
   mode_t clear_mode = 0;
 
-  Inode::Ptr in = inode(ino);
+  auto in = inode(ino);
 
   auto now = std::time(nullptr);
 
@@ -655,7 +650,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
     if (uid) {   // not root
       if (!fh) { // not open file descriptor
-        int ret = Access(in, W_OK, uid, gid);
+        int ret = access(in, W_OK, uid, gid);
         if (ret)
           return ret;
       } else if (((fh->flags & O_ACCMODE) != O_WRONLY) &&
@@ -670,7 +665,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
 
     assert(in->is_regular());
     auto reg_in = std::dynamic_pointer_cast<RegInode>(in);
-    int ret = Truncate(reg_in, attr->st_size, uid, gid);
+    int ret = truncate(reg_in, attr->st_size, uid, gid);
     if (ret < 0)
       return ret;
 
@@ -687,7 +682,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
   return 0;
 }
 
-int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
+int FileSystem::symlink(const std::string& link, fuse_ino_t parent_ino,
     const std::string& name, struct stat *st, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -704,7 +699,7 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
   if (children.find(name) != children.end())
     return -EEXIST;
 
-  int ret = Access(parent_in, W_OK, uid, gid);
+  int ret = access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
@@ -719,11 +714,11 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
   return 0;
 }
 
-ssize_t FileSystem::Readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t uid, gid_t gid)
+ssize_t FileSystem::readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  SymlinkInode::Ptr in = symlink_inode(ino);
+  auto in = symlink_inode(ino);
 
   size_t link_len = in->link.size();
 
@@ -735,12 +730,12 @@ ssize_t FileSystem::Readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t ui
   return link_len;
 }
 
-int FileSystem::Statfs(fuse_ino_t ino, struct statvfs *stbuf)
+int FileSystem::statfs(fuse_ino_t ino, struct statvfs *stbuf)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
   // assert we are in this file system
-  Inode::Ptr in = inode(ino);
+  auto in = inode(ino);
   (void)in;
 
   stat.f_files = nfiles();
@@ -752,7 +747,7 @@ int FileSystem::Statfs(fuse_ino_t ino, struct statvfs *stbuf)
   return 0;
 }
 
-int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string& newname,
+int FileSystem::link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string& newname,
     struct stat *st, uid_t uid, gid_t gid)
 {
   if (newname.length() > NAME_MAX)
@@ -760,16 +755,16 @@ int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  DirInode::Ptr newparent_in = dir_inode(newparent_ino);
+  auto newparent_in = dir_inode(newparent_ino);
   if (newparent_in->dentries.find(newname) != newparent_in->dentries.end())
     return -EEXIST;
 
-  Inode::Ptr in = inode(ino);
+  auto in = inode(ino);
 
   if (in->i_st.st_mode & S_IFDIR)
     return -EPERM;
 
-  int ret = Access(newparent_in, W_OK, uid, gid);
+  int ret = access(newparent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
@@ -790,7 +785,7 @@ int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string
   return 0;
 }
 
-int FileSystem::Access(Inode::Ptr in, int mask, uid_t uid, gid_t gid)
+int FileSystem::access(const std::shared_ptr<Inode>& in, int mask, uid_t uid, gid_t gid)
 {
   if (mask == F_OK)
     return 0;
@@ -851,13 +846,13 @@ int FileSystem::Access(Inode::Ptr in, int mask, uid_t uid, gid_t gid)
 }
 
 
-int FileSystem::Access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid)
+int FileSystem::access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = inode(ino);
+  auto in = inode(ino);
 
-  return Access(in, mask, uid, gid);
+  return access(in, mask, uid, gid);
 }
 
 /*
@@ -867,7 +862,7 @@ int FileSystem::Access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid)
  * TODO: add checks that enforce non-use of special files. Note that this
  * routine can also create regular files.
  */
-int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
+int FileSystem::mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     dev_t rdev, struct stat *st, uid_t uid, gid_t gid)
 {
   if (name.length() > NAME_MAX)
@@ -875,7 +870,8 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<Inode>(next_ino_++, now, uid, gid, 4096, mode, this);
+  // TODO: may not be Regular Inode?
+  auto in = std::make_shared<RegInode>(next_ino_++, now, uid, gid, 4096, mode, this);
 
   // directories start with nlink = 2, but according to mknod(2), "Under
   // Linux, mknod() cannot be used to create directories.  One should make
@@ -884,12 +880,12 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  DirInode::Ptr parent_in = dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
   if (children.find(name) != children.end())
     return -EEXIST;
 
-  int ret = Access(parent_in, W_OK, uid, gid);
+  int ret = access(parent_in, W_OK, uid, gid);
   if (ret)
     return ret;
 
@@ -904,14 +900,14 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   return 0;
 }
 
-int FileSystem::OpenDir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid)
+int FileSystem::opendir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = inode(ino);
+  auto in = inode(ino);
 
   if ((flags & O_ACCMODE) == O_RDONLY) {
-    int ret = Access(in, R_OK, uid, gid);
+    int ret = access(in, R_OK, uid, gid);
     if (ret)
       return ret;
   }
@@ -926,7 +922,7 @@ int FileSystem::OpenDir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid)
  * we just do an in-order traversal of the directory and return the Nth
  * item.
  */
-ssize_t FileSystem::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
+ssize_t FileSystem::readdir(fuse_req_t req, fuse_ino_t ino, char *buf,
     size_t bufsize, off_t off)
 {
   std::lock_guard<std::mutex> l(mutex_);
@@ -964,7 +960,7 @@ ssize_t FileSystem::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
 
   assert(off >= 2);
 
-  DirInode::Ptr dir_in = dir_inode(ino);
+  auto dir_in = dir_inode(ino);
   const DirInode::dir_t& children = dir_in->dentries;
 
   size_t count = 0;
@@ -973,7 +969,7 @@ ssize_t FileSystem::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
   for (DirInode::dir_t::const_iterator it = children.begin();
       it != children.end(); it++) {
     if (count >= target) {
-      Inode::Ptr in = it->second;
+      auto in = it->second;
       assert(in);
       memset(&st, 0, sizeof(st));
       st.st_ino = in->i_st.st_ino;
@@ -990,7 +986,7 @@ ssize_t FileSystem::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
   return pos;
 }
 
-void FileSystem::ReleaseDir(fuse_ino_t ino) {}
+void FileSystem::releasedir(fuse_ino_t ino) {}
 
 void FileSystem::free_space(Extent *extent)
 {
@@ -998,7 +994,7 @@ void FileSystem::free_space(Extent *extent)
   avail_bytes_ += extent->size;
 }
 
-int FileSystem::Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
+int FileSystem::truncate(const std::shared_ptr<RegInode>& in, off_t newsize, uid_t uid, gid_t gid)
 {
   // easy: nothing to do
   if (in->i_st.st_size == newsize) {
@@ -1103,7 +1099,7 @@ int FileSystem::Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
 
     while (left) {
       size_t done = std::min(left, sizeof(zeros));
-      ssize_t ret = Write(in, in->i_st.st_size, done, zeros);
+      ssize_t ret = write(in, in->i_st.st_size, done, zeros);
       assert(ret > 0);
       left -= ret;
     }
@@ -1118,7 +1114,7 @@ int FileSystem::Truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid)
  * Allocate storage space for a file. The space should be available at file
  * offset @offset, and be no larger than @size bytes.
  */
-int FileSystem::allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
+int FileSystem::allocate_space(const std::shared_ptr<RegInode>& in, std::map<off_t, Extent>::iterator *it,
     off_t offset, size_t size, bool upper_bound)
 {
   // cap allocation size at 1mb, and if it isn't just filling a hole, then
@@ -1140,7 +1136,7 @@ int FileSystem::allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterat
   return 0;
 }
 
-ssize_t FileSystem::Write(RegInode::Ptr in, off_t offset, size_t size, const char *buf)
+ssize_t FileSystem::write(const std::shared_ptr<RegInode>& in, off_t offset, size_t size, const char *buf)
 {
   auto now = std::time(nullptr);
   in->i_st.st_ctime = now;
