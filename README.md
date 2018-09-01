@@ -1,3 +1,5 @@
+<img src="/arch.png" width="100" align="right"/>
+
 # Low-level FUSE file system boilerplate
 
 [![Build Status](https://travis-ci.org/noahdesu/fusell-seed.svg?branch=master)](https://travis-ci.org/noahdesu/fusell-seed)
