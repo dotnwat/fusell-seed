@@ -27,6 +27,12 @@ Inode::Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksiz
   i_st.st_mode = mode;
 }
 
+Inode::~Inode() {
+  if (krefs != 0 && !fs_->shutting_down) {
+    std::cerr << "inode " << ino << " freed with kref " << krefs << std::endl;
+  }
+}
+
 /*
  * FIXME: space should be freed here, but also when it is deleted, if there
  * are no other open file handles. Otherwise, space is only freed after the

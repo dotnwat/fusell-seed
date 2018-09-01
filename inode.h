@@ -2,7 +2,9 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <cassert>
 #include <vector>
+#include <iostream>
 #include <fuse.h>
 #include <fuse_lowlevel.h>
 
@@ -24,7 +26,7 @@ class Inode {
 
   Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
       mode_t mode, FileSystem *fs);
-  virtual ~Inode() {}
+  virtual ~Inode();
 
   const fuse_ino_t ino;
 
@@ -33,6 +35,8 @@ class Inode {
   bool is_regular() const;
   bool is_directory() const;
   bool is_symlink() const;
+
+  long int krefs = 0;
 
  protected:
   FileSystem *fs_;

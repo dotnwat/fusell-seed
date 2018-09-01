@@ -15,6 +15,12 @@
 
 #include "filesystem.h"
 
+static void ll_destroy(void *userdata)
+{
+  auto fs = reinterpret_cast<FileSystem*>(userdata);
+  fs->Destroy();
+}
+
 static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
     mode_t mode, struct fuse_file_info *fi)
 {
@@ -444,6 +450,7 @@ int main(int argc, char *argv[])
   // Operation registry
   struct fuse_lowlevel_ops ll_oper;
   std::memset(&ll_oper, 0, sizeof(ll_oper));
+  ll_oper.destroy     = ll_destroy;
   ll_oper.lookup      = ll_lookup;
   ll_oper.getattr     = ll_getattr;
   ll_oper.opendir     = ll_opendir;

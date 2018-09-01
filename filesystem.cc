@@ -17,7 +17,7 @@ FileSystem::FileSystem(size_t size) :
       getuid(), getgid(), 4096, 0755, this);
 
   // bump kernel inode cache reference count
-  ino_refs_.add(root);
+  RegisterInode(root);
 
   total_bytes_ = size;
   avail_bytes_ = total_bytes_;
@@ -32,11 +32,57 @@ FileSystem::FileSystem(size_t size) :
   stat.f_bfree = stat.f_blocks;
   stat.f_bavail = stat.f_blocks;
 
-  auto console = spdlog::stdout_color_mt("console");
+  console_ = spdlog::stdout_color_mt("console");
 
   if (!next_ino_.is_always_lock_free) {
-    console->warn("inode number allocation may not be lock free");
+    console_->warn("inode number allocation may not be lock free");
   }
+}
+
+void FileSystem::RegisterInode(const std::shared_ptr<Inode>& inode)
+{
+  assert(inode->krefs == 0);
+  inode->krefs++;
+  auto res = inodes_.emplace(inode->ino, inode);
+  assert(res.second); // check for duplicate ino
+}
+
+void FileSystem::GetInode(const std::shared_ptr<Inode>& inode)
+{
+  inode->krefs++;
+  auto res = inodes_.emplace(inode->ino, inode);
+  if (!res.second) {
+    assert(inode->krefs > 0);
+  } else {
+    assert(inode->krefs == 0);
+  }
+}
+
+void FileSystem::PutInode(fuse_ino_t ino, long int dec)
+{
+  auto it = inodes_.find(ino);
+  assert(it != inodes_.end());
+  assert(it->second->krefs > 0);
+  it->second->krefs -= dec;
+  assert(it->second->krefs >= 0);
+  if (it->second->krefs == 0) {
+    inodes_.erase(it);
+  }
+}
+
+uint64_t FileSystem::nfiles() const
+{
+  uint64_t ret = 0;
+  for (auto it = inodes_.begin(); it != inodes_.end(); it++)
+    if (it->second->i_st.st_mode & S_IFREG)
+      ret++;
+  return ret;
+}
+
+void FileSystem::Destroy()
+{
+  console_->info("destroying file system");
+  shutting_down = true;
 }
 
 int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
@@ -52,7 +98,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto parent_in = ino_refs_.dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
   if (children.find(name) != children.end())
     return -EEXIST;
@@ -62,7 +108,7 @@ int FileSystem::Create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
     return ret;
 
   children[name] = in;
-  ino_refs_.add(in);
+  RegisterInode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;
@@ -77,7 +123,7 @@ int FileSystem::GetAttr(fuse_ino_t ino, struct stat *st, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto in = ino_refs_.inode(ino);
+  auto in = inode(ino);
 
   *st = in->i_st;
 
@@ -88,7 +134,7 @@ int FileSystem::Unlink(fuse_ino_t parent_ino, const std::string& name, uid_t uid
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto parent_in = ino_refs_.dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t::const_iterator it = parent_in->dentries.find(name);
   if (it == parent_in->dentries.end())
     return -ENOENT;
@@ -125,15 +171,18 @@ int FileSystem::Lookup(fuse_ino_t parent_ino, const std::string& name, struct st
   std::lock_guard<std::mutex> l(mutex_);
 
   // FIXME: should this be -ENOTDIR or -ENOENT in some cases?
-  auto parent_in = ino_refs_.dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t::const_iterator it = parent_in->dentries.find(name);
-  if (it == parent_in->dentries.end())
+  if (it == parent_in->dentries.end()) {
+    console_->warn("lookup parent {} name {} not found", parent_ino, name);
     return -ENOENT;
+  }
 
   auto in = it->second;
+  console_->warn("lookup parent {} name {} found {}", parent_ino, name, in->ino);
 
   // bump kernel inode cache reference count
-  ino_refs_.get(in);
+  GetInode(in);
 
   *st = in->i_st;
 
@@ -155,7 +204,7 @@ int FileSystem::Open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto generic_in = ino_refs_.inode(ino);
+  auto generic_in = inode(ino);
   auto in = std::dynamic_pointer_cast<RegInode>(generic_in);
   assert(in->is_regular());
   auto fh = std::make_unique<FileHandle>(in, flags);
@@ -186,10 +235,12 @@ void FileSystem::Release(fuse_ino_t ino, FileHandle *fh)
 
 void FileSystem::Forget(fuse_ino_t ino, long unsigned nlookup)
 {
+  console_->warn("forget ino {} nlookup {}", ino, nlookup);
+
   std::lock_guard<std::mutex> l(mutex_);
 
   // decrease kernel inode cache reference count
-  ino_refs_.put(ino, nlookup);
+  PutInode(ino, nlookup);
 }
 
 ssize_t FileSystem::Write(FileHandle *fh, off_t offset, size_t size, const char *buf)
@@ -351,7 +402,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto parent_in = ino_refs_.dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
   if (children.find(name) != children.end())
     return -EEXIST;
@@ -361,7 +412,7 @@ int FileSystem::Mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
     return ret;
 
   children[name] = in;
-  ino_refs_.add(in);
+  RegisterInode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;
@@ -377,7 +428,7 @@ int FileSystem::Rmdir(fuse_ino_t parent_ino, const std::string& name,
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto parent_in = ino_refs_.dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
   DirInode::dir_t::const_iterator it = children.find(name);
   if (it == children.end())
@@ -416,7 +467,7 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
   std::lock_guard<std::mutex> l(mutex_);
 
   // old
-  auto parent_in = ino_refs_.dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& parent_children = parent_in->dentries;
   DirInode::dir_t::const_iterator old_it = parent_children.find(name);
   if (old_it == parent_children.end())
@@ -426,7 +477,7 @@ int FileSystem::Rename(fuse_ino_t parent_ino, const std::string& name,
   assert(old_in);
 
   // new
-  auto newparent_in = ino_refs_.dir_inode(newparent_ino);
+  auto newparent_in = dir_inode(newparent_ino);
   DirInode::dir_t& newparent_children = newparent_in->dentries;
   DirInode::dir_t::const_iterator new_it = newparent_children.find(newname);
 
@@ -521,7 +572,7 @@ int FileSystem::SetAttr(fuse_ino_t ino, FileHandle *fh, struct stat *attr,
   std::lock_guard<std::mutex> l(mutex_);
   mode_t clear_mode = 0;
 
-  Inode::Ptr in = ino_refs_.inode(ino);
+  Inode::Ptr in = inode(ino);
 
   auto now = std::time(nullptr);
 
@@ -637,7 +688,7 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  auto parent_in = ino_refs_.dir_inode(parent_ino);
+  auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
   if (children.find(name) != children.end())
     return -EEXIST;
@@ -647,7 +698,7 @@ int FileSystem::Symlink(const std::string& link, fuse_ino_t parent_ino,
     return ret;
 
   children[name] = in;
-  ino_refs_.add(in);
+  RegisterInode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;
@@ -661,7 +712,7 @@ ssize_t FileSystem::Readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t ui
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  SymlinkInode::Ptr in = ino_refs_.symlink_inode(ino);
+  SymlinkInode::Ptr in = symlink_inode(ino);
 
   size_t link_len = in->link.size();
 
@@ -678,10 +729,10 @@ int FileSystem::Statfs(fuse_ino_t ino, struct statvfs *stbuf)
   std::lock_guard<std::mutex> l(mutex_);
 
   // assert we are in this file system
-  Inode::Ptr in = ino_refs_.inode(ino);
+  Inode::Ptr in = inode(ino);
   (void)in;
 
-  stat.f_files = ino_refs_.nfiles();
+  stat.f_files = nfiles();
   stat.f_bfree = avail_bytes_ / 4096;
   stat.f_bavail = avail_bytes_ / 4096;
 
@@ -698,11 +749,11 @@ int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  DirInode::Ptr newparent_in = ino_refs_.dir_inode(newparent_ino);
+  DirInode::Ptr newparent_in = dir_inode(newparent_ino);
   if (newparent_in->dentries.find(newname) != newparent_in->dentries.end())
     return -EEXIST;
 
-  Inode::Ptr in = ino_refs_.inode(ino);
+  Inode::Ptr in = inode(ino);
 
   if (in->i_st.st_mode & S_IFDIR)
     return -EPERM;
@@ -714,7 +765,7 @@ int FileSystem::Link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string
   auto now = std::time(nullptr);
 
   // bump in kernel inode cache reference count
-  ino_refs_.get(in);
+  GetInode(in);
 
   in->i_st.st_ctime = now;
   in->i_st.st_nlink++;
@@ -793,7 +844,7 @@ int FileSystem::Access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = ino_refs_.inode(ino);
+  Inode::Ptr in = inode(ino);
 
   return Access(in, mask, uid, gid);
 }
@@ -822,7 +873,7 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   std::lock_guard<std::mutex> l(mutex_);
 
-  DirInode::Ptr parent_in = ino_refs_.dir_inode(parent_ino);
+  DirInode::Ptr parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
   if (children.find(name) != children.end())
     return -EEXIST;
@@ -832,7 +883,7 @@ int FileSystem::Mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
     return ret;
 
   children[name] = in;
-  ino_refs_.add(in);
+  RegisterInode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;
@@ -846,7 +897,7 @@ int FileSystem::OpenDir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid)
 {
   std::lock_guard<std::mutex> l(mutex_);
 
-  Inode::Ptr in = ino_refs_.inode(ino);
+  Inode::Ptr in = inode(ino);
 
   if ((flags & O_ACCMODE) == O_RDONLY) {
     int ret = Access(in, R_OK, uid, gid);
@@ -902,7 +953,7 @@ ssize_t FileSystem::ReadDir(fuse_req_t req, fuse_ino_t ino, char *buf,
 
   assert(off >= 2);
 
-  DirInode::Ptr dir_in = ino_refs_.dir_inode(ino);
+  DirInode::Ptr dir_in = dir_inode(ino);
   const DirInode::dir_t& children = dir_in->dentries;
 
   size_t count = 0;
