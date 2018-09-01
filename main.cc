@@ -15,6 +15,15 @@
 
 #include "filesystem.h"
 
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
+
+static void ll_destroy(void *userdata)
+{
+  auto fs = reinterpret_cast<FileSystem*>(userdata);
+  fs->Destroy();
+}
+
 static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
     mode_t mode, struct fuse_file_info *fi)
 {
@@ -390,7 +399,7 @@ struct filesystem_opts {
 #define FS_OPT(t, p, v) { t, offsetof(struct filesystem_opts, p), v }
 
 static struct fuse_opt fs_fuse_opts[] = {
-  FS_OPT("size=%u",              size, 0),
+  FS_OPT("size=%llu",              size, 0),
   FUSE_OPT_KEY("-h",             KEY_HELP),
   FUSE_OPT_KEY("--help",         KEY_HELP),
   FUSE_OPT_END
@@ -430,6 +439,9 @@ int main(int argc, char *argv[])
 
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
+  auto console = spdlog::stdout_color_mt("console");
+  console->set_level(spdlog::level::err);
+
   if (fuse_opt_parse(&args, &opts, fs_fuse_opts, fs_opt_proc) == -1) {
     exit(1);
   }
@@ -444,6 +456,7 @@ int main(int argc, char *argv[])
   // Operation registry
   struct fuse_lowlevel_ops ll_oper;
   std::memset(&ll_oper, 0, sizeof(ll_oper));
+  ll_oper.destroy     = ll_destroy;
   ll_oper.lookup      = ll_lookup;
   ll_oper.getattr     = ll_getattr;
   ll_oper.opendir     = ll_opendir;
@@ -490,7 +503,7 @@ int main(int argc, char *argv[])
   std::cout << std::endl;
   fflush(stdout); // FIXME: std::abc version?
 
-  FileSystem fs(opts.size);
+  FileSystem fs(opts.size, console);
 
   if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
       (ch = fuse_mount(mountpoint, &args)) != NULL) {

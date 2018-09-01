@@ -9,19 +9,29 @@
 #include <fuse.h>
 #include <fuse_lowlevel.h>
 #include "inode.h"
-#include "file_handle.h"
-#include "inode_index.h"
 #include "spdlog/spdlog.h"
-#include "spdlog/sinks/stdout_color_sinks.h"
+
+struct FileHandle {
+  std::shared_ptr<RegInode> in;
+  int flags;
+
+  FileHandle(RegInode::Ptr in, int flags) :
+    in(in), flags(flags)
+  {}
+};
 
 class FileSystem {
  public:
-  explicit FileSystem(size_t size);
+  FileSystem(size_t size, const std::shared_ptr<spdlog::logger>& log);
 
   FileSystem(const FileSystem& other) = delete;
   FileSystem(FileSystem&& other) = delete;
   FileSystem& operator=(const FileSystem& other) = delete;
   FileSystem& operator=(const FileSystem&& other) = delete;
+
+  // fuse methods
+ public:
+  void Destroy();
 
   int Create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
       int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid);
@@ -96,8 +106,30 @@ class FileSystem {
   std::mutex mutex_;
   struct statvfs stat;
 
-  InodeIndex ino_refs_;
-
   size_t total_bytes_;
   size_t avail_bytes_;
+
+  void RegisterInode(const std::shared_ptr<Inode>& inode);
+  void GetInode(const std::shared_ptr<Inode>& inode);
+  void PutInode(fuse_ino_t ino, long int dec);
+  uint64_t nfiles() const;
+  std::unordered_map<fuse_ino_t, std::shared_ptr<Inode>> inodes_;
+
+  Inode::Ptr inode(fuse_ino_t ino) {
+    return inodes_.at(ino);;
+  }
+
+  DirInode::Ptr dir_inode(fuse_ino_t ino) {
+    auto in = inode(ino);
+    assert(in->is_directory());
+    return std::static_pointer_cast<DirInode>(in);
+  }
+
+  SymlinkInode::Ptr symlink_inode(fuse_ino_t ino) {
+    auto in = inode(ino);
+    assert(in->is_symlink());
+    return std::static_pointer_cast<SymlinkInode>(in);
+  }
+
+  std::shared_ptr<spdlog::logger> log_;
 };
