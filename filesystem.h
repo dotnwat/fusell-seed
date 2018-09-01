@@ -9,9 +9,17 @@
 #include <fuse.h>
 #include <fuse_lowlevel.h>
 #include "inode.h"
-#include "file_handle.h"
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
+
+struct FileHandle {
+  std::shared_ptr<RegInode> in;
+  int flags;
+
+  FileHandle(RegInode::Ptr in, int flags) :
+    in(in), flags(flags)
+  {}
+};
 
 class FileSystem {
  public:
