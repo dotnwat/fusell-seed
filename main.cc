@@ -440,6 +440,7 @@ int main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   auto console = spdlog::stdout_color_mt("console");
+  console->set_level(spdlog::level::err);
 
   if (fuse_opt_parse(&args, &opts, fs_fuse_opts, fs_opt_proc) == -1) {
     exit(1);
