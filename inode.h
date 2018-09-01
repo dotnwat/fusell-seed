@@ -23,8 +23,6 @@ struct Extent {
 
 class Inode {
  public:
-  typedef std::shared_ptr<Inode> Ptr;
-
   Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
       blksize_t blksize, mode_t mode, FileSystem *fs) :
     ino(ino), fs_(fs)
@@ -57,8 +55,6 @@ class Inode {
 
 class RegInode : public Inode {
  public:
-  typedef std::shared_ptr<RegInode> Ptr;
-
   RegInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
       blksize_t blksize, mode_t mode, FileSystem *fs) :
     Inode(ino, time, uid, gid, blksize, mode, fs)
@@ -74,8 +70,7 @@ class RegInode : public Inode {
 
 class DirInode : public Inode {
  public:
-  typedef std::shared_ptr<DirInode> Ptr;
-  typedef std::map<std::string, Inode::Ptr> dir_t;
+  typedef std::map<std::string, std::shared_ptr<Inode>> dir_t;
 
   DirInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
       blksize_t blksize, mode_t mode, FileSystem *fs) :
@@ -91,8 +86,6 @@ class DirInode : public Inode {
 
 class SymlinkInode : public Inode {
  public:
-  typedef std::shared_ptr<SymlinkInode> Ptr;
-
   SymlinkInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
       blksize_t blksize, const std::string& link, FileSystem *fs) :
     Inode(ino, time, uid, gid, blksize, 0, fs)

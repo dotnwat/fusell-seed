@@ -87,10 +87,11 @@ class FileSystem {
   void release(fuse_ino_t ino, FileHandle *fh);
 
  private:
-  int access(Inode::Ptr in, int mask, uid_t uid, gid_t gid);
-  int truncate(RegInode::Ptr in, off_t newsize, uid_t uid, gid_t gid);
-  ssize_t write(RegInode::Ptr in, off_t offset, size_t size, const char *buf);
-  int allocate_space(RegInode::Ptr in, std::map<off_t, Extent>::iterator *it,
+  // TODO: probably do not need to pass shared ptr here
+  int access(const std::shared_ptr<Inode>& in, int mask, uid_t uid, gid_t gid);
+  int truncate(const std::shared_ptr<RegInode>& in, off_t newsize, uid_t uid, gid_t gid);
+  ssize_t write(const std::shared_ptr<RegInode>& in, off_t offset, size_t size, const char *buf);
+  int allocate_space(const std::shared_ptr<RegInode>& in, std::map<off_t, Extent>::iterator *it,
       off_t offset, size_t size, bool upper_bound);
 
   std::atomic<fuse_ino_t> next_ino_;
@@ -107,17 +108,17 @@ class FileSystem {
   uint64_t nfiles() const;
   std::unordered_map<fuse_ino_t, std::shared_ptr<Inode>> inodes_;
 
-  Inode::Ptr inode(fuse_ino_t ino) {
+  std::shared_ptr<Inode> inode(fuse_ino_t ino) {
     return inodes_.at(ino);;
   }
 
-  DirInode::Ptr dir_inode(fuse_ino_t ino) {
+  std::shared_ptr<DirInode> dir_inode(fuse_ino_t ino) {
     auto in = inode(ino);
     assert(in->is_directory());
     return std::static_pointer_cast<DirInode>(in);
   }
 
-  SymlinkInode::Ptr symlink_inode(fuse_ino_t ino) {
+  std::shared_ptr<SymlinkInode> symlink_inode(fuse_ino_t ino) {
     auto in = inode(ino);
     assert(in->is_symlink());
     return std::static_pointer_cast<SymlinkInode>(in);
