@@ -2,6 +2,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <cstring>
 #include <cassert>
 #include <vector>
 #include <iostream>
@@ -24,9 +25,21 @@ class Inode {
  public:
   typedef std::shared_ptr<Inode> Ptr;
 
-  Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-      mode_t mode, FileSystem *fs);
-  virtual ~Inode();
+  Inode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
+      blksize_t blksize, mode_t mode, FileSystem *fs) :
+    ino(ino), fs_(fs)
+  {
+    memset(&i_st, 0, sizeof(i_st));
+    i_st.st_ino = ino;
+    i_st.st_atime = time;
+    i_st.st_mtime = time;
+    i_st.st_ctime = time;
+    i_st.st_uid = uid;
+    i_st.st_gid = gid;
+    i_st.st_blksize = blksize;
+  }
+
+  virtual ~Inode() = 0;
 
   const fuse_ino_t ino;
 
@@ -45,12 +58,17 @@ class Inode {
 class RegInode : public Inode {
  public:
   typedef std::shared_ptr<RegInode> Ptr;
-  RegInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-      mode_t mode, FileSystem *fs) :
-    Inode(ino, time, uid, gid, blksize, mode, fs) {
-      i_st.st_mode = S_IFREG | mode;
-    }
+
+  RegInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
+      blksize_t blksize, mode_t mode, FileSystem *fs) :
+    Inode(ino, time, uid, gid, blksize, mode, fs)
+  {
+    i_st.st_nlink = 1;
+    i_st.st_mode = S_IFREG | mode;
+  }
+
   ~RegInode();
+
   std::map<off_t, Extent> extents_;
 };
 
@@ -58,25 +76,31 @@ class DirInode : public Inode {
  public:
   typedef std::shared_ptr<DirInode> Ptr;
   typedef std::map<std::string, Inode::Ptr> dir_t;
-  DirInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-      mode_t mode, FileSystem *fs) :
-    Inode(ino, time, uid, gid, blksize, mode, fs) {
-      i_st.st_nlink = 2;
-      i_st.st_mode = S_IFDIR | mode;
-      i_st.st_blocks = 1;
-    }
+
+  DirInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
+      blksize_t blksize, mode_t mode, FileSystem *fs) :
+    Inode(ino, time, uid, gid, blksize, mode, fs)
+  {
+    i_st.st_nlink = 2;
+    i_st.st_blocks = 1;
+    i_st.st_mode = S_IFDIR | mode;
+  }
+
   dir_t dentries;
 };
 
 class SymlinkInode : public Inode {
  public:
   typedef std::shared_ptr<SymlinkInode> Ptr;
-  SymlinkInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid, blksize_t blksize,
-      const std::string& link, FileSystem *fs) :
-    Inode(ino, time, uid, gid, blksize, 0, fs) {
-      i_st.st_mode = S_IFLNK;
-      this->link = link;
-      i_st.st_size = link.length();
-    }
+
+  SymlinkInode(fuse_ino_t ino, time_t time, uid_t uid, gid_t gid,
+      blksize_t blksize, const std::string& link, FileSystem *fs) :
+    Inode(ino, time, uid, gid, blksize, 0, fs)
+  {
+    i_st.st_mode = S_IFLNK;
+    i_st.st_size = link.length();
+    this->link = link;
+  }
+
   std::string link;
 };

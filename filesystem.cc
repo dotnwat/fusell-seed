@@ -870,7 +870,8 @@ int FileSystem::mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   auto now = std::time(nullptr);
 
-  auto in = std::make_shared<Inode>(next_ino_++, now, uid, gid, 4096, mode, this);
+  // TODO: may not be Regular Inode?
+  auto in = std::make_shared<RegInode>(next_ino_++, now, uid, gid, 4096, mode, this);
 
   // directories start with nlink = 2, but according to mknod(2), "Under
   // Linux, mknod() cannot be used to create directories.  One should make
