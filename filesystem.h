@@ -87,26 +87,14 @@ class FileSystem {
   void release(fuse_ino_t ino, FileHandle *fh);
 
  private:
-  // TODO: probably do not need to pass shared ptr here
-  int access(const std::shared_ptr<Inode>& in, int mask, uid_t uid, gid_t gid);
-  int truncate(const std::shared_ptr<RegInode>& in, off_t newsize, uid_t uid, gid_t gid);
-  ssize_t write(const std::shared_ptr<RegInode>& in, off_t offset, size_t size, const char *buf);
-  int allocate_space(const std::shared_ptr<RegInode>& in, std::map<off_t, Extent>::iterator *it,
-      off_t offset, size_t size, bool upper_bound);
-
-  std::atomic<fuse_ino_t> next_ino_;
-
   std::mutex mutex_;
-  struct statvfs stat;
+  std::shared_ptr<spdlog::logger> log_;
 
-  size_t total_bytes_;
-  size_t avail_bytes_;
-
-  void RegisterInode(const std::shared_ptr<Inode>& inode);
-  void GetInode(const std::shared_ptr<Inode>& inode);
-  void PutInode(fuse_ino_t ino, long int dec);
-  uint64_t nfiles() const;
-  std::unordered_map<fuse_ino_t, std::shared_ptr<Inode>> inodes_;
+  // inode management
+ private:
+  void add_inode(const std::shared_ptr<Inode>& inode);
+  void get_inode(const std::shared_ptr<Inode>& inode);
+  void put_inode(fuse_ino_t ino, long int dec);
 
   std::shared_ptr<Inode> inode(fuse_ino_t ino) {
     return inodes_.at(ino);;
@@ -124,5 +112,27 @@ class FileSystem {
     return std::static_pointer_cast<SymlinkInode>(in);
   }
 
-  std::shared_ptr<spdlog::logger> log_;
+  std::atomic<fuse_ino_t> next_ino_;
+  std::unordered_map<fuse_ino_t, std::shared_ptr<Inode>> inodes_;
+
+  // helpers
+ private:
+  // TODO: probably do not need to pass shared ptr here
+  ssize_t write(const std::shared_ptr<RegInode>& in, off_t offset,
+      size_t size, const char *buf);
+
+  int access(const std::shared_ptr<Inode>& in, int mask,
+      uid_t uid, gid_t gid);
+
+  int truncate(const std::shared_ptr<RegInode>& in, off_t newsize,
+      uid_t uid, gid_t gid);
+
+  int allocate_space(RegInode *in, std::map<off_t, Extent>::iterator *it,
+      off_t offset, size_t size, bool upper_bound);
+
+  uint64_t nfiles() const;
+
+  struct statvfs stat;
+  size_t avail_bytes_;
+
 };
