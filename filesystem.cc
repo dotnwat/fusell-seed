@@ -234,8 +234,12 @@ int FileSystem::open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
   else if ((flags & O_ACCMODE) == O_RDWR)
     mode = R_OK | W_OK;
 
-  if (!(mode & W_OK) && (flags & O_TRUNC))
-    return -EACCES;
+  if (!(mode & W_OK) && (flags & O_TRUNC)) {
+    const int ret = -EACCES;
+    log_->debug("open ino {} flags {} uid {} gid {} ret {}",
+        ino, flags, uid, gid, ret);
+    return ret;
+  }
 
   std::lock_guard<std::mutex> l(mutex_);
 
@@ -245,13 +249,19 @@ int FileSystem::open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
   auto fh = std::make_unique<FileHandle>(in, flags);
 
   int ret = access(in, mode, uid, gid);
-  if (ret)
+  if (ret) {
+    log_->debug("open ino {} flags {} uid {} gid {} ret {}",
+        ino, flags, uid, gid, ret);
     return ret;
+  }
 
   if (flags & O_TRUNC) {
     ret = truncate(in, 0, uid, gid);
-    if (ret)
+    if (ret) {
+      log_->debug("open ino {} flags {} uid {} gid {} ret {}",
+          ino, flags, uid, gid, ret);
       return ret;
+    }
     auto now = std::time(nullptr);
     in->i_st.st_mtime = now;
     in->i_st.st_ctime = now;
@@ -259,22 +269,23 @@ int FileSystem::open(fuse_ino_t ino, int flags, FileHandle **fhp, uid_t uid, gid
 
   *fhp = fh.release();
 
+  log_->debug("open ino {} flags {} uid {} gid {} ret {}",
+      ino, flags, uid, gid, 0);
+
   return 0;
 }
 
 void FileSystem::release(fuse_ino_t ino, FileHandle *fh)
 {
+  log_->debug("release ino {} fh {}", ino, (void*)fh);
   assert(fh);
   delete fh;
 }
 
 void FileSystem::forget(fuse_ino_t ino, long unsigned nlookup)
 {
-  log_->warn("forget ino {} nlookup {}", ino, nlookup);
-
+  log_->debug("forget ino {} nlookup {}", ino, nlookup);
   std::lock_guard<std::mutex> l(mutex_);
-
-  // decrease kernel inode cache reference count
   put_inode(ino, nlookup);
 }
 
@@ -409,8 +420,12 @@ ssize_t FileSystem::read(FileHandle *fh, off_t offset,
 int FileSystem::mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     struct stat *st, uid_t uid, gid_t gid)
 {
-  if (name.length() > NAME_MAX)
-    return -ENAMETOOLONG;
+  if (name.length() > NAME_MAX) {
+    const int ret = -ENAMETOOLONG;
+    log_->debug("mkdir parent {} name {} mode {} uid {} gid {} ret {}",
+        parent_ino, name, mode, uid, gid, ret);
+    return ret;
+  }
 
   auto now = std::time(nullptr);
 
@@ -420,12 +435,19 @@ int FileSystem::mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
 
   auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
-  if (children.find(name) != children.end())
-    return -EEXIST;
+  if (children.find(name) != children.end()) {
+    const int ret = -EEXIST;
+    log_->debug("mkdir parent {} name {} mode {} uid {} gid {} ret {}",
+        parent_ino, name, mode, uid, gid, ret);
+    return ret;
+  }
 
   int ret = access(parent_in, W_OK, uid, gid);
-  if (ret)
+  if (ret) {
+    log_->debug("mkdir parent {} name {} mode {} uid {} gid {} ret {}",
+        parent_ino, name, mode, uid, gid, ret);
     return ret;
+  }
 
   children[name] = in;
   add_inode(in);
@@ -435,6 +457,9 @@ int FileSystem::mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
   parent_in->i_st.st_nlink++;
 
   *st = in->i_st;
+
+  log_->debug("mkdir parent {} name {} mode {} uid {} gid {} ret {}",
+      parent_ino, name, mode, uid, gid, 0);
 
   return 0;
 }
@@ -447,20 +472,32 @@ int FileSystem::rmdir(fuse_ino_t parent_ino, const std::string& name,
   auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
   DirInode::dir_t::const_iterator it = children.find(name);
-  if (it == children.end())
+  if (it == children.end()) {
+    log_->debug("rmdir ENOENT parent {} name {} uid {} gid {}",
+        parent_ino, name, uid, gid);
     return -ENOENT;
+  }
 
-  if (!it->second->is_directory())
+  if (!it->second->is_directory()) {
+    log_->debug("rmdir ENOTDIR parent {} name {} uid {} gid {}",
+        parent_ino, name, uid, gid);
     return -ENOTDIR;
+  }
 
   auto in = std::static_pointer_cast<DirInode>(it->second);
 
-  if (in->dentries.size())
+  if (in->dentries.size()) {
+    log_->debug("rmdir ENOTEMPTY parent {} name {} uid {} gid {}",
+        parent_ino, name, uid, gid);
     return -ENOTEMPTY;
+  }
 
   if (parent_in->i_st.st_mode & S_ISVTX) {
-    if (uid && uid != in->i_st.st_uid && uid != parent_in->i_st.st_uid)
+    if (uid && uid != in->i_st.st_uid && uid != parent_in->i_st.st_uid) {
+      log_->debug("rmdir EPERM parent {} name {} uid {} gid {}",
+          parent_ino, name, uid, gid);
       return -EPERM;
+    }
   }
 
   auto now = std::time(nullptr);
@@ -469,6 +506,9 @@ int FileSystem::rmdir(fuse_ino_t parent_ino, const std::string& name,
   parent_in->i_st.st_ctime = now;
   parent_in->dentries.erase(it);
   parent_in->i_st.st_nlink--;
+
+  log_->debug("rmdir parent {} name {} uid {} gid {}",
+      parent_ino, name, uid, gid);
 
   return 0;
 }
@@ -729,15 +769,20 @@ ssize_t FileSystem::readlink(fuse_ino_t ino, char *path, size_t maxlen, uid_t ui
   std::lock_guard<std::mutex> l(mutex_);
 
   auto in = symlink_inode(ino);
-
   size_t link_len = in->link.size();
+  ssize_t ret;
 
-  if (link_len > maxlen)
-    return -ENAMETOOLONG;
+  if (link_len > maxlen) {
+    ret = -ENAMETOOLONG;
+  } else {
+    in->link.copy(path, link_len, 0);
+    ret = link_len;
+  }
 
-  in->link.copy(path, link_len, 0);
+  log_->debug("readlink ino {} path {} maxlen {} uid {} gid {} ret {}",
+      ino, path, maxlen, uid, gid, ret);
 
-  return link_len;
+  return ret;
 }
 
 int FileSystem::statfs(fuse_ino_t ino, struct statvfs *stbuf)
