@@ -19,7 +19,8 @@ struct FileHandle {
 
 FileSystem::FileSystem(size_t size,
     const std::shared_ptr<spdlog::logger>& log) :
-  next_ino_(FUSE_ROOT_ID), log_(log)
+  log_(log),
+  next_ino_(FUSE_ROOT_ID)
 {
   auto now = std::time(nullptr);
 
@@ -29,15 +30,14 @@ FileSystem::FileSystem(size_t size,
   // bump kernel inode cache reference count
   RegisterInode(root);
 
-  total_bytes_ = size;
-  avail_bytes_ = total_bytes_;
+  avail_bytes_ = size;
 
   memset(&stat, 0, sizeof(stat));
   stat.f_fsid = 983983;
   stat.f_namemax = PATH_MAX;
   stat.f_bsize = 4096;
   stat.f_frsize = 4096;
-  stat.f_blocks = total_bytes_ / 4096;
+  stat.f_blocks = size / 4096;
   stat.f_files = 0;
   stat.f_bfree = stat.f_blocks;
   stat.f_bavail = stat.f_blocks;
@@ -1114,7 +1114,8 @@ int FileSystem::truncate(const std::shared_ptr<RegInode>& in, off_t newsize, uid
  * Allocate storage space for a file. The space should be available at file
  * offset @offset, and be no larger than @size bytes.
  */
-int FileSystem::allocate_space(const std::shared_ptr<RegInode>& in, std::map<off_t, Extent>::iterator *it,
+int FileSystem::allocate_space(RegInode *in,
+    std::map<off_t, Extent>::iterator *it,
     off_t offset, size_t size, bool upper_bound)
 {
   // cap allocation size at 1mb, and if it isn't just filling a hole, then
@@ -1149,7 +1150,7 @@ ssize_t FileSystem::write(const std::shared_ptr<RegInode>& in, off_t offset, siz
     --it;
   } else if (it == in->extents_.end()) {
     assert(in->extents_.empty());
-    int ret = allocate_space(in, &it, offset, size, false);
+    int ret = allocate_space(in.get(), &it, offset, size, false);
     if (ret)
       return ret;
   }
@@ -1170,7 +1171,7 @@ ssize_t FileSystem::write(const std::shared_ptr<RegInode>& in, off_t offset, siz
         " upper_bound=true"
         << std::endl;
 #endif
-      int ret = allocate_space(in, &it, offset, seg_offset - offset, true);
+      int ret = allocate_space(in.get(), &it, offset, seg_offset - offset, true);
       if (ret)
         return ret;
 
@@ -1201,7 +1202,7 @@ ssize_t FileSystem::write(const std::shared_ptr<RegInode>& in, off_t offset, siz
     // case 3. the offset falls past the extent, and there are no more
     // extents. in this case we extend the file allocation.
     if (++it == in->extents_.end()) {
-      int ret = allocate_space(in, &it, offset, left, false);
+      int ret = allocate_space(in.get(), &it, offset, left, false);
       if (ret)
         return ret;
 
