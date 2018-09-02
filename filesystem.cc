@@ -27,8 +27,7 @@ FileSystem::FileSystem(size_t size,
   auto root = std::make_shared<DirInode>(next_ino_++, now,
       getuid(), getgid(), 4096, 0755, this);
 
-  // bump kernel inode cache reference count
-  RegisterInode(root);
+  add_inode(root);
 
   avail_bytes_ = size;
 
@@ -62,7 +61,7 @@ FileSystem::FileSystem(size_t size,
   }
 }
 
-void FileSystem::RegisterInode(const std::shared_ptr<Inode>& inode)
+void FileSystem::add_inode(const std::shared_ptr<Inode>& inode)
 {
   assert(inode->krefs == 0);
   inode->krefs++;
@@ -70,7 +69,7 @@ void FileSystem::RegisterInode(const std::shared_ptr<Inode>& inode)
   assert(res.second); // check for duplicate ino
 }
 
-void FileSystem::GetInode(const std::shared_ptr<Inode>& inode)
+void FileSystem::get_inode(const std::shared_ptr<Inode>& inode)
 {
   inode->krefs++;
   auto res = inodes_.emplace(inode->ino, inode);
@@ -81,7 +80,7 @@ void FileSystem::GetInode(const std::shared_ptr<Inode>& inode)
   }
 }
 
-void FileSystem::PutInode(fuse_ino_t ino, long int dec)
+void FileSystem::put_inode(fuse_ino_t ino, long int dec)
 {
   auto it = inodes_.find(ino);
   assert(it != inodes_.end());
@@ -104,17 +103,21 @@ uint64_t FileSystem::nfiles() const
 
 void FileSystem::destroy()
 {
-  log_->info("destroying file system");
-  for (auto in : inodes_) {
-    in.second->krefs = 0;
-  }
+  log_->info("shutting down file system");
+  // note that according to the fuse documentation when the file system is
+  // unmounted and shutdown all of the inode references implicitly drop to zero.
 }
 
 int FileSystem::create(fuse_ino_t parent_ino, const std::string& name, mode_t mode,
     int flags, struct stat *st, FileHandle **fhp, uid_t uid, gid_t gid)
 {
-  if (name.length() > NAME_MAX)
+  log_->debug("create parent {} name {} mode {} flags {} uid {} gid {}",
+      parent_ino, name, mode, flags, uid, gid);
+
+  if (name.length() > NAME_MAX) {
+    log_->debug("create name {} too long", name);
     return -ENAMETOOLONG;
+  }
 
   auto now = std::time(nullptr);
 
@@ -125,21 +128,27 @@ int FileSystem::create(fuse_ino_t parent_ino, const std::string& name, mode_t mo
 
   auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t& children = parent_in->dentries;
-  if (children.find(name) != children.end())
+  if (children.find(name) != children.end()) {
+    log_->debug("create name {} already exists", name);
     return -EEXIST;
+  }
 
   int ret = access(parent_in, W_OK, uid, gid);
-  if (ret)
+  if (ret) {
+    log_->debug("create name {} access denied ret {}", name, ret);
     return ret;
+  }
 
   children[name] = in;
-  RegisterInode(in);
+  add_inode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;
 
   *st = in->i_st;
   *fhp = fh.release();
+
+  log_->debug("created name {} with ino {}", name, in->ino);
 
   return 0;
 }
@@ -199,17 +208,18 @@ int FileSystem::lookup(fuse_ino_t parent_ino, const std::string& name, struct st
   auto parent_in = dir_inode(parent_ino);
   DirInode::dir_t::const_iterator it = parent_in->dentries.find(name);
   if (it == parent_in->dentries.end()) {
-    log_->warn("lookup parent {} name {} not found", parent_ino, name);
+    log_->debug("lookup parent {} name {} not found", parent_ino, name);
     return -ENOENT;
   }
 
   auto in = it->second;
-  log_->warn("lookup parent {} name {} found {}", parent_ino, name, in->ino);
 
   // bump kernel inode cache reference count
-  GetInode(in);
+  get_inode(in);
 
   *st = in->i_st;
+
+  log_->debug("lookup parent {} name {} found {}", parent_ino, name, in->ino);
 
   return 0;
 }
@@ -265,7 +275,7 @@ void FileSystem::forget(fuse_ino_t ino, long unsigned nlookup)
   std::lock_guard<std::mutex> l(mutex_);
 
   // decrease kernel inode cache reference count
-  PutInode(ino, nlookup);
+  put_inode(ino, nlookup);
 }
 
 ssize_t FileSystem::write_buf(FileHandle *fh, struct fuse_bufvec *bufv, off_t off)
@@ -418,7 +428,7 @@ int FileSystem::mkdir(fuse_ino_t parent_ino, const std::string& name, mode_t mod
     return ret;
 
   children[name] = in;
-  RegisterInode(in);
+  add_inode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;
@@ -704,7 +714,7 @@ int FileSystem::symlink(const std::string& link, fuse_ino_t parent_ino,
     return ret;
 
   children[name] = in;
-  RegisterInode(in);
+  add_inode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;
@@ -771,7 +781,7 @@ int FileSystem::link(fuse_ino_t ino, fuse_ino_t newparent_ino, const std::string
   auto now = std::time(nullptr);
 
   // bump in kernel inode cache reference count
-  GetInode(in);
+  get_inode(in);
 
   in->i_st.st_ctime = now;
   in->i_st.st_nlink++;
@@ -890,7 +900,7 @@ int FileSystem::mknod(fuse_ino_t parent_ino, const std::string& name, mode_t mod
     return ret;
 
   children[name] = in;
-  RegisterInode(in);
+  add_inode(in);
 
   parent_in->i_st.st_ctime = now;
   parent_in->i_st.st_mtime = now;

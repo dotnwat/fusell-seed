@@ -92,9 +92,9 @@ class FileSystem {
 
   // inode management
  private:
-  void RegisterInode(const std::shared_ptr<Inode>& inode);
-  void GetInode(const std::shared_ptr<Inode>& inode);
-  void PutInode(fuse_ino_t ino, long int dec);
+  void add_inode(const std::shared_ptr<Inode>& inode);
+  void get_inode(const std::shared_ptr<Inode>& inode);
+  void put_inode(fuse_ino_t ino, long int dec);
 
   std::shared_ptr<Inode> inode(fuse_ino_t ino) {
     return inodes_.at(ino);;

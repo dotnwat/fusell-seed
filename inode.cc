@@ -4,12 +4,7 @@
 #include <fuse.h>
 #include "filesystem.h"
 
-Inode::~Inode() {
-  if (krefs != 0) {
-    std::cerr << "inode " << ino << " freed with kref " << krefs << std::endl;
-    assert(0);
-  }
-}
+Inode::~Inode() {}
 
 /*
  * FIXME: space should be freed here, but also when it is deleted, if there
