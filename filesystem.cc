@@ -57,7 +57,7 @@ FileSystem::FileSystem(size_t size,
     assert(0 == "oh yeh?");
   }
 
-  if (!next_ino_.is_always_lock_free) {
+  if (!next_ino_.is_lock_free()) {
     log_->warn("inode number allocation may not be lock free");
   }
 }
