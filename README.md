@@ -40,11 +40,3 @@ The set of tests can be found in the `test/` directory. A selection:
 * Multiple configurations of iozone (test/iozone.sh)
 * Build PostgreSQL and run tests (test/postgres.sh)
 * Build Git and run unit tests (test/git.sh)
-
-# Notes
-
-[nwatkins@kyoto fusell-seed]$ ./main mount -o fsname=fusell -o allow_other -o atomic_o_trunc
-Heap size:             512
-write interface: write_buf
-fusermount: option allow_other only allowed if 'user_allow_other' is set in
-/etc/fuse.conf
