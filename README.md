@@ -6,13 +6,13 @@
 
 This project is a bare bones implementation of an in-memory FUSE file system
 that uses the low-level FUSE interface. It passes a large percentage of the
-POSIX compliance test suite, is regularly stress tested with numerous
-workloads, and can serve as a good starting point for your next file system
-project.
+POSIX compliance test suite (some things like unix sockets aren't yet handled),
+is regularly stress tested with numerous workloads, and can serve as a good starting point
+for your next file system project.
 
 Many FUSE file systems found out in the wild use the high-level FUSE interface
 that operates on file paths. In contrast to the path-based interface, the
-low-level interface in FUSE operates on i-nodes, and offers a lot of flexibility.
+low-level interface in FUSE operates on inodes, and offers a lot of flexibility.
 However, there seems to be relatively few examples of how to build a file system
 with this more advanced interface.
 
