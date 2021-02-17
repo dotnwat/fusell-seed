@@ -65,7 +65,7 @@ void FileSystem::add_inode(const std::shared_ptr<Inode>& inode)
 {
   assert(inode->krefs == 0);
   inode->krefs++;
-  auto res = inodes_.emplace(inode->ino, inode);
+  [[maybe_unused]] auto res = inodes_.emplace(inode->ino, inode);
   assert(res.second); // check for duplicate ino
 }
 
