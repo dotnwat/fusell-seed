@@ -1,25 +1,19 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.15)
 
 project(fusell-seed)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# require c++14 (Thanks Ceph)
-if(CMAKE_VERSION VERSION_LESS "3.8")
-  include(CheckCXXCompilerFlag)
-  CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14)
-  if(NOT COMPILER_SUPPORTS_CXX14)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support.")
-  endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
-else()
-  set(CMAKE_CXX_STANDARD 14)
-  set(CMAKE_CXX_EXTENSIONS OFF)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wall -g")
+
+if(NOT CMAKE_BUILD_TYPE MATCHES Release)
+  # non-release: default, debug, etc...
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -fsanitize=undefined -fsanitize=address")
+endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_search_module(FUSE REQUIRED fuse)
