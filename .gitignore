@@ -9,3 +9,4 @@ main
 Makefile
 fstest
 .*.swp
+.cache
