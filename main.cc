@@ -440,32 +440,46 @@ int main(int argc, char* argv[]) {
     // Operation registry
     struct fuse_lowlevel_ops ll_oper;
     std::memset(&ll_oper, 0, sizeof(ll_oper));
+    // void (*init) (void *userdata, struct fuse_conn_info *conn);
     ll_oper.destroy = ll_destroy;
     ll_oper.lookup = ll_lookup;
+    ll_oper.forget = ll_forget;
     ll_oper.getattr = ll_getattr;
+    ll_oper.setattr = ll_setattr;
+    ll_oper.readlink = ll_readlink;
+    ll_oper.mknod = ll_mknod;
+    ll_oper.mkdir = ll_mkdir;
+    ll_oper.unlink = ll_unlink;
+    ll_oper.rmdir = ll_rmdir;
+    ll_oper.symlink = ll_symlink;
+    ll_oper.rename = ll_rename;
+    ll_oper.link = ll_link;
+    ll_oper.open = ll_open;
+    ll_oper.read = ll_read;
+    // void (*write) (fuse_req_t req, fuse_ino_t ino, const char *buf,
+    // void (*flush) (fuse_req_t req, fuse_ino_t ino,
+    ll_oper.release = ll_release;
+    ll_oper.fsync = ll_fsync;
     ll_oper.opendir = ll_opendir;
     ll_oper.readdir = ll_readdir;
     ll_oper.releasedir = ll_releasedir;
-    ll_oper.open = ll_open;
-    ll_oper.read = ll_read;
-    ll_oper.write_buf = ll_write_buf;
-    ll_oper.create = ll_create;
-    ll_oper.release = ll_release;
-    ll_oper.unlink = ll_unlink;
-    ll_oper.mkdir = ll_mkdir;
-    ll_oper.rmdir = ll_rmdir;
-    ll_oper.rename = ll_rename;
-    ll_oper.setattr = ll_setattr;
-    ll_oper.symlink = ll_symlink;
-    ll_oper.readlink = ll_readlink;
-    ll_oper.fsync = ll_fsync;
     ll_oper.fsyncdir = ll_fsyncdir;
     ll_oper.statfs = ll_statfs;
-    ll_oper.link = ll_link;
+    // void (*setxattr) (fuse_req_t req, fuse_ino_t ino, const char *name,
+    // void (*getxattr) (fuse_req_t req, fuse_ino_t ino, const char *name,
+    // void (*listxattr) (fuse_req_t req, fuse_ino_t ino, size_t size);
+    // void (*removexattr) (fuse_req_t req, fuse_ino_t ino, const char *name);
     ll_oper.access = ll_access;
-    ll_oper.mknod = ll_mknod;
-    ll_oper.forget = ll_forget;
+    ll_oper.create = ll_create;
+    // void (*getlk) (fuse_req_t req, fuse_ino_t ino,
+    // void (*setlk) (fuse_req_t req, fuse_ino_t ino,
+    // void (*bmap) (fuse_req_t req, fuse_ino_t ino, size_t blocksize,
+    // void (*ioctl) (fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
+    // void (*poll) (fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi,
+    ll_oper.write_buf = ll_write_buf;
+    // void (*retrieve_reply) (fuse_req_t req, void *cookie, fuse_ino_t ino,
     ll_oper.forget_multi = ll_forget_multi;
+    // void (*flock) (fuse_req_t req, fuse_ino_t ino,
     ll_oper.fallocate = ll_fallocate;
 
     FileSystem fs(opts.size, console);
