@@ -435,7 +435,6 @@ int main(int argc, char* argv[]) {
     assert(opts.size > 0);
 
     struct fuse_chan* ch;
-    char* mountpoint;
     int err = -1;
 
     // Operation registry
@@ -471,6 +470,7 @@ int main(int argc, char* argv[]) {
 
     FileSystem fs(opts.size, console);
 
+    char* mountpoint = nullptr;
     if (
       fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1
       && (ch = fuse_mount(mountpoint, &args)) != NULL) {
@@ -489,6 +489,9 @@ int main(int argc, char* argv[]) {
         fuse_unmount(mountpoint, ch);
     }
     fuse_opt_free_args(&args);
+    if (mountpoint) {
+        free(mountpoint);
+    }
 
     int rv = err ? 1 : 0;
 
