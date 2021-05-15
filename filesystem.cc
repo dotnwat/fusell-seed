@@ -8,8 +8,6 @@
 #include <string>
 #include <unistd.h>
 
-#include "inode.h"
-
 struct FileHandle {
     std::shared_ptr<RegInode> in;
     int flags;

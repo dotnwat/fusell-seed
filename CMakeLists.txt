@@ -20,7 +20,7 @@ pkg_search_module(FUSE REQUIRED fuse)
 
 include_directories(spdlog/include)
 
-add_executable(main main.cc inode.cc filesystem.cc)
+add_executable(main main.cc filesystem.cc)
 target_include_directories(main PRIVATE ${FUSE_INCLUDE_DIRS})
 target_link_libraries(main ${FUSE_LIBRARIES})
 target_compile_options(main PRIVATE ${FUSE_CFLAGS})
