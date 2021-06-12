@@ -20,7 +20,7 @@ pkg_search_module(FUSE REQUIRED fuse)
 
 include_directories(spdlog/include)
 
-add_executable(heap_fs heap_fs.cc inode.cc filesystem.cc)
+add_executable(heap_fs heap_fs.cc)
 target_include_directories(heap_fs PRIVATE ${FUSE_INCLUDE_DIRS})
 target_link_libraries(heap_fs ${FUSE_LIBRARIES})
 target_compile_options(heap_fs PRIVATE ${FUSE_CFLAGS})
