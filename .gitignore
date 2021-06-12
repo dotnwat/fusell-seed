@@ -5,7 +5,8 @@ CMakeFiles/
 cmake_install.cmake
 compile_commands.json
 build
-main
+heap_fs
+.clangd
 Makefile
 fstest
 .*.swp

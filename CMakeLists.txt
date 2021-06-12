@@ -20,11 +20,11 @@ pkg_search_module(FUSE REQUIRED fuse)
 
 include_directories(spdlog/include)
 
-add_executable(main main.cc inode.cc filesystem.cc)
-target_include_directories(main PRIVATE ${FUSE_INCLUDE_DIRS})
-target_link_libraries(main ${FUSE_LIBRARIES})
-target_compile_options(main PRIVATE ${FUSE_CFLAGS})
-target_compile_definitions(main PRIVATE FUSE_USE_VERSION=30)
+add_executable(heap_fs heap_fs.cc inode.cc filesystem.cc)
+target_include_directories(heap_fs PRIVATE ${FUSE_INCLUDE_DIRS})
+target_link_libraries(heap_fs ${FUSE_LIBRARIES})
+target_compile_options(heap_fs PRIVATE ${FUSE_CFLAGS})
+target_compile_definitions(heap_fs PRIVATE FUSE_USE_VERSION=30)
 
 enable_testing()
 add_subdirectory(test)
