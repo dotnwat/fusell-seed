@@ -1,14 +1,296 @@
-#include "filesystem.h"
-
-#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <iostream>
-#include <limits.h>
-#include <string>
-#include <unistd.h>
+#include <stddef.h>
+#if defined(__linux__)
+#include <linux/limits.h>
+#elif defined(__APPLE__)
+#include <sys/syslimits.h>
+#endif
 
-#include "inode.h"
+#include <fuse.h>
+#include <fuse_lowlevel.h>
+#include <fuse_opt.h>
+
+#include "filesystem.h"
+#include "spdlog/sinks/stdout_color_sinks.h"
+#include "spdlog/spdlog.h"
+
+struct Extent {
+    Extent(size_t size)
+      : size(size)
+      , buf(new char[size]) {}
+
+    size_t size;
+    std::unique_ptr<char[]> buf;
+};
+
+struct FileSystem;
+
+class Inode {
+public:
+    Inode(
+      fuse_ino_t ino,
+      time_t time,
+      uid_t uid,
+      gid_t gid,
+      blksize_t blksize,
+      mode_t mode,
+      FileSystem* fs)
+      : ino(ino)
+      , fs_(fs) {
+        memset(&i_st, 0, sizeof(i_st));
+        i_st.st_ino = ino;
+        i_st.st_atime = time;
+        i_st.st_mtime = time;
+        i_st.st_ctime = time;
+        i_st.st_uid = uid;
+        i_st.st_gid = gid;
+        i_st.st_blksize = blksize;
+    }
+
+    virtual ~Inode() = 0;
+
+    const fuse_ino_t ino;
+
+    struct stat i_st;
+
+    bool is_regular() const;
+    bool is_directory() const;
+    bool is_symlink() const;
+
+    long int krefs = 0;
+
+protected:
+    FileSystem* fs_;
+};
+
+class RegInode : public Inode {
+public:
+    RegInode(
+      fuse_ino_t ino,
+      time_t time,
+      uid_t uid,
+      gid_t gid,
+      blksize_t blksize,
+      mode_t mode,
+      FileSystem* fs)
+      : Inode(ino, time, uid, gid, blksize, mode, fs) {
+        i_st.st_nlink = 1;
+        i_st.st_mode = S_IFREG | mode;
+    }
+
+    ~RegInode();
+
+    std::map<off_t, Extent> extents_;
+};
+
+class DirInode : public Inode {
+public:
+    typedef std::map<std::string, std::shared_ptr<Inode>> dir_t;
+
+    DirInode(
+      fuse_ino_t ino,
+      time_t time,
+      uid_t uid,
+      gid_t gid,
+      blksize_t blksize,
+      mode_t mode,
+      FileSystem* fs)
+      : Inode(ino, time, uid, gid, blksize, mode, fs) {
+        i_st.st_nlink = 2;
+        i_st.st_blocks = 1;
+        i_st.st_mode = S_IFDIR | mode;
+    }
+
+    dir_t dentries;
+};
+
+class SymlinkInode : public Inode {
+public:
+    SymlinkInode(
+      fuse_ino_t ino,
+      time_t time,
+      uid_t uid,
+      gid_t gid,
+      blksize_t blksize,
+      const std::string& link,
+      FileSystem* fs)
+      : Inode(ino, time, uid, gid, blksize, 0, fs) {
+        i_st.st_mode = S_IFLNK;
+        i_st.st_size = link.length();
+        this->link = link;
+    }
+
+    std::string link;
+};
+
+class FileSystem : public filesystem_base {
+public:
+    FileSystem(size_t size, const std::shared_ptr<spdlog::logger>& log);
+
+    FileSystem(const FileSystem& other) = delete;
+    FileSystem(FileSystem&& other) = delete;
+    ~FileSystem() = default;
+    FileSystem& operator=(const FileSystem& other) = delete;
+    FileSystem& operator=(const FileSystem&& other) = delete;
+
+public:
+    void destroy();
+    int lookup(fuse_ino_t parent_ino, const std::string& name, struct stat* st);
+    void forget(fuse_ino_t ino, long unsigned nlookup);
+    int statfs(fuse_ino_t ino, struct statvfs* stbuf);
+
+    // TODO: get rid of this method
+    void free_space(Extent* extent);
+
+    // inode operations
+public:
+    int mknod(
+      fuse_ino_t parent_ino,
+      const std::string& name,
+      mode_t mode,
+      dev_t rdev,
+      struct stat* st,
+      uid_t uid,
+      gid_t gid);
+
+    int symlink(
+      const std::string& link,
+      fuse_ino_t parent_ino,
+      const std::string& name,
+      struct stat* st,
+      uid_t uid,
+      gid_t gid);
+
+    int link(
+      fuse_ino_t ino,
+      fuse_ino_t newparent_ino,
+      const std::string& newname,
+      struct stat* st,
+      uid_t uid,
+      gid_t gid);
+
+    int rename(
+      fuse_ino_t parent_ino,
+      const std::string& name,
+      fuse_ino_t newparent_ino,
+      const std::string& newname,
+      uid_t uid,
+      gid_t gid);
+
+    int unlink(
+      fuse_ino_t parent_ino, const std::string& name, uid_t uid, gid_t gid);
+
+    int access(fuse_ino_t ino, int mask, uid_t uid, gid_t gid);
+
+    int getattr(fuse_ino_t ino, struct stat* st, uid_t uid, gid_t gid);
+
+    int setattr(
+      fuse_ino_t ino,
+      FileHandle* fh,
+      struct stat* attr,
+      int to_set,
+      uid_t uid,
+      gid_t gid);
+
+    ssize_t
+    readlink(fuse_ino_t ino, char* path, size_t maxlen, uid_t uid, gid_t gid);
+
+    // directory operations
+public:
+    int mkdir(
+      fuse_ino_t parent_ino,
+      const std::string& name,
+      mode_t mode,
+      struct stat* st,
+      uid_t uid,
+      gid_t gid);
+
+    int opendir(fuse_ino_t ino, int flags, uid_t uid, gid_t gid);
+
+    ssize_t readdir(
+      fuse_req_t req, fuse_ino_t ino, char* buf, size_t bufsize, off_t off);
+
+    int
+    rmdir(fuse_ino_t parent_ino, const std::string& name, uid_t uid, gid_t gid);
+
+    void releasedir(fuse_ino_t ino);
+
+    // file handle operation
+public:
+    int create(
+      fuse_ino_t parent_ino,
+      const std::string& name,
+      mode_t mode,
+      int flags,
+      struct stat* st,
+      FileHandle** fhp,
+      uid_t uid,
+      gid_t gid);
+
+    int open(fuse_ino_t ino, int flags, FileHandle** fhp, uid_t uid, gid_t gid);
+    ssize_t write_buf(FileHandle* fh, struct fuse_bufvec* bufv, off_t off);
+    ssize_t read(FileHandle* fh, off_t offset, size_t size, char* buf);
+    void release(fuse_ino_t ino, FileHandle* fh);
+
+private:
+    std::mutex mutex_;
+    std::shared_ptr<spdlog::logger> log_;
+
+    // inode management
+private:
+    void add_inode(const std::shared_ptr<Inode>& inode);
+    void get_inode(const std::shared_ptr<Inode>& inode);
+    void put_inode(fuse_ino_t ino, long int dec);
+
+    std::shared_ptr<Inode> inode(fuse_ino_t ino) {
+        return inodes_.at(ino);
+        ;
+    }
+
+    std::shared_ptr<DirInode> dir_inode(fuse_ino_t ino) {
+        auto in = inode(ino);
+        assert(in->is_directory());
+        return std::static_pointer_cast<DirInode>(in);
+    }
+
+    std::shared_ptr<SymlinkInode> symlink_inode(fuse_ino_t ino) {
+        auto in = inode(ino);
+        assert(in->is_symlink());
+        return std::static_pointer_cast<SymlinkInode>(in);
+    }
+
+    std::atomic<fuse_ino_t> next_ino_;
+    std::unordered_map<fuse_ino_t, std::shared_ptr<Inode>> inodes_;
+
+    // helpers
+private:
+    // TODO: probably do not need to pass shared ptr here
+    ssize_t write(
+      const std::shared_ptr<RegInode>& in,
+      off_t offset,
+      size_t size,
+      const char* buf);
+
+    int
+    access(const std::shared_ptr<Inode>& in, int mask, uid_t uid, gid_t gid);
+
+    int truncate(
+      const std::shared_ptr<RegInode>& in, off_t newsize, uid_t uid, gid_t gid);
+
+    int allocate_space(
+      RegInode* in,
+      std::map<off_t, Extent>::iterator* it,
+      off_t offset,
+      size_t size,
+      bool upper_bound);
+
+    uint64_t nfiles() const;
+
+    struct statvfs stat;
+    size_t avail_bytes_;
+};
 
 struct FileHandle {
     std::shared_ptr<RegInode> in;
@@ -1312,4 +1594,119 @@ ssize_t FileSystem::write(
     }
 
     return size;
+}
+
+Inode::~Inode() {}
+
+/*
+ * FIXME: space should be freed here, but also when it is deleted, if there
+ * are no other open file handles. Otherwise, space is only freed after the
+ * file is deleted and the kernel releases its references.
+ */
+RegInode::~RegInode() {
+    for (auto it = extents_.begin(); it != extents_.end(); it++)
+        fs_->free_space(&it->second);
+    extents_.clear();
+}
+
+bool Inode::is_regular() const { return i_st.st_mode & S_IFREG; }
+
+bool Inode::is_directory() const { return i_st.st_mode & S_IFDIR; }
+
+bool Inode::is_symlink() const { return i_st.st_mode & S_IFLNK; }
+
+enum {
+    KEY_HELP,
+};
+
+struct filesystem_opts {
+    size_t size;
+    bool debug;
+};
+
+#define FS_OPT(t, p, v)                                                        \
+    { t, offsetof(struct filesystem_opts, p), v }
+
+static struct fuse_opt fs_fuse_opts[] = {
+  FS_OPT("size=%llu", size, 0),
+  FS_OPT("-debug", debug, 1),
+  FUSE_OPT_KEY("-h", KEY_HELP),
+  FUSE_OPT_KEY("--help", KEY_HELP),
+  FUSE_OPT_END};
+
+static void usage(const char* progname) {
+    printf("file system options:\n"
+           "    -o size=N          max file system size (bytes)\n"
+           "    -debug             turn on verbose logging\n");
+}
+
+static int
+fs_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs) {
+    switch (key) {
+    case FUSE_OPT_KEY_OPT:
+        return 1;
+    case FUSE_OPT_KEY_NONOPT:
+        return 1;
+    case KEY_HELP:
+        usage(NULL);
+        exit(1);
+    default:
+        assert(0);
+        exit(1);
+    }
+}
+
+int main(int argc, char* argv[]) {
+    struct filesystem_opts opts;
+
+    // option defaults
+    opts.size = 512 << 20;
+    opts.debug = false;
+
+    struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
+
+    if (fuse_opt_parse(&args, &opts, fs_fuse_opts, fs_opt_proc) == -1) {
+        exit(1);
+    }
+
+    auto console = spdlog::stdout_color_mt("console");
+    if (opts.debug) {
+        console->set_level(spdlog::level::debug);
+    } else {
+        console->set_level(spdlog::level::info);
+    }
+
+    assert(opts.size > 0);
+
+    struct fuse_chan* ch;
+    int err = -1;
+
+    FileSystem fs(opts.size, console);
+
+    char* mountpoint = nullptr;
+    if (
+      fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1
+      && (ch = fuse_mount(mountpoint, &args)) != NULL) {
+        struct fuse_session* se;
+
+        se = fuse_lowlevel_new(&args, &fs.ops(), sizeof(fs.ops()), &fs);
+        if (se != NULL) {
+            if (fuse_set_signal_handlers(se) != -1) {
+                fuse_session_add_chan(se, ch);
+                err = fuse_session_loop_mt(se);
+                fuse_remove_signal_handlers(se);
+                fuse_session_remove_chan(ch);
+            }
+            fuse_session_destroy(se);
+        }
+        fuse_unmount(mountpoint, ch);
+    }
+    fuse_opt_free_args(&args);
+    if (mountpoint) {
+        free(mountpoint);
+    }
+
+    int rv = err ? 1 : 0;
+
+    return rv;
 }
