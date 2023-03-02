@@ -7,12 +7,12 @@
 #elif defined(__APPLE__)
 #include <sys/syslimits.h>
 #endif
-
 #include <fuse.h>
 #include <fuse_lowlevel.h>
 #include <fuse_opt.h>
+#include <map>
 
-#include "filesystem.h"
+#include "include/nnn/nnn.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 
@@ -25,7 +25,7 @@ struct Extent {
     std::unique_ptr<char[]> buf;
 };
 
-struct FileSystem;
+class FileSystem;
 
 class Inode {
 public:
@@ -125,7 +125,7 @@ public:
     std::string link;
 };
 
-class FileSystem : public filesystem_base {
+class FileSystem {
 public:
     FileSystem(size_t size, const std::shared_ptr<spdlog::logger>& log);
 
@@ -1681,7 +1681,7 @@ int main(int argc, char* argv[]) {
     struct fuse_chan* ch;
     int err = -1;
 
-    FileSystem fs(opts.size, console);
+    foo::filesystem<FileSystem> fs(opts.size, console);
 
     char* mountpoint = nullptr;
     if (
@@ -1689,7 +1689,8 @@ int main(int argc, char* argv[]) {
       && (ch = fuse_mount(mountpoint, &args)) != NULL) {
         struct fuse_session* se;
 
-        se = fuse_lowlevel_new(&args, &fs.ops(), sizeof(fs.ops()), &fs);
+        se = fuse_lowlevel_new(
+          &args, &fs.ops(), sizeof(fs.ops()), &fs.userdata());
         if (se != NULL) {
             if (fuse_set_signal_handlers(se) != -1) {
                 fuse_session_add_chan(se, ch);
