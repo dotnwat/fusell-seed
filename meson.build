@@ -7,11 +7,14 @@ project('fusell-seed', 'cpp',
 
 fuse = dependency('fuse')
 
+inc_dirs = [include_directories('spdlog/include'),
+  include_directories('include')]
+
 nnn_dep = declare_dependency(
-  include_directories: include_directories('include', 'spdlog/include'),
+  include_directories: inc_dirs,
   compile_args: ['-DFUSE_USE_VERSION=35'],
   dependencies: [fuse])
 
-executable('heap_fs',
-  'heap_fs.cc',
-  dependencies: [nnn_dep])
+if not meson.is_subproject()
+  subdir('examples')
+endif

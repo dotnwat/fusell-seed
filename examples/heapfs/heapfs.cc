@@ -12,7 +12,7 @@
 #include <fuse_opt.h>
 #include <map>
 
-#include "include/nnn/nnn.h"
+#include "nnn/nnn.h"
 #include "spdlog/sinks/stdout_color_sinks.h"
 #include "spdlog/spdlog.h"
 
