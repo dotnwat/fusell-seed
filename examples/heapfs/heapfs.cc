@@ -1681,7 +1681,8 @@ int main(int argc, char* argv[]) {
     struct fuse_chan* ch;
     int err = -1;
 
-    foo::filesystem<FileSystem> fs(opts.size, console);
+    foo::lowlevel_ops<foo::default_lowlevel_ops<FileSystem>> fs(
+      opts.size, console);
 
     char* mountpoint = nullptr;
     if (

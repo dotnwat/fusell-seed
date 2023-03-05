@@ -10,15 +10,13 @@ class filesystem {
 public:
     template<typename... Args>
     filesystem(Args&&... args)
-      : fs_(std::make_unique<T>(std::forward<Args>(args)...))
-      , ops_(std::make_unique<D>()) {}
+      : ops_(std::forward<Args>(args)...) {}
 
-    const fuse_lowlevel_ops& ops() const { return ops_->ops(); }
-    T& userdata() { return *fs_; }
+    const fuse_lowlevel_ops& ops() const { return ops_.ops(); }
+    T& userdata() { return ops_.userdata(); }
 
 private:
-    std::unique_ptr<T> fs_;
-    std::unique_ptr<D> ops_;
+    D ops_;
 };
 
 } // namespace foo

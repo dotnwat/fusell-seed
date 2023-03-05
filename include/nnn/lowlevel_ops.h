@@ -2,6 +2,7 @@
 #include <concepts>
 #include <fuse_lowlevel.h>
 #include <type_traits>
+#include <utility>
 
 namespace foo {
 
@@ -231,7 +232,9 @@ concept lowlevel_write_buffer = requires(T t) {
 template<typename T>
 class lowlevel_ops {
 public:
-    lowlevel_ops() {
+    template<typename... Args>
+    lowlevel_ops(Args&&... args)
+      : ll_(std::forward<Args>(args)...) {
         if constexpr (lowlevel_destroy<T>) {
             ops_.destroy = ll_destroy;
         }
@@ -308,12 +311,16 @@ public:
     }
 
     const fuse_lowlevel_ops& ops() const { return ops_; }
+    T& userdata() { return ll_; }
 
 private:
+    static T* get(void* userdata) { return reinterpret_cast<T*>(userdata); }
+    static T* get(fuse_req_t req) { return get(fuse_req_userdata(req)); }
+
     static void ll_destroy(void* userdata)
         requires lowlevel_destroy<T>
     {
-        T::destroy(userdata);
+        get(userdata)->destroy(userdata);
     }
 
     static void ll_create(
@@ -324,52 +331,52 @@ private:
       struct fuse_file_info* fi)
         requires lowlevel_create<T>
     {
-        T::create(req, parent, name, mode, fi);
+        get(req)->create(req, parent, name, mode, fi);
     }
 
     static void
     ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires lowlevel_release<T>
     {
-        T::release(req, ino, fi);
+        get(req)->release(req, ino, fi);
     }
 
     static void ll_unlink(fuse_req_t req, fuse_ino_t parent, const char* name)
         requires lowlevel_unlink<T>
     {
-        T::unlink(req, parent, name);
+        get(req)->unlink(req, parent, name);
     }
 
     static void ll_forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
         requires lowlevel_forget<T>
     {
-        T::forget(req, ino, nlookup);
+        get(req)->forget(req, ino, nlookup);
     }
 
     // TODO
     static void ll_forget_multi(
       fuse_req_t req, size_t count, struct fuse_forget_data* forgets) {
-        T::forget_multi(req, count, forgets);
+        get(req)->forget_multi(req, count, forgets);
     }
 
     static void
     ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires lowlevel_get_attribute<T>
     {
-        T::getattr(req, ino, fi);
+        get(req)->getattr(req, ino, fi);
     }
 
     static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
         requires lowlevel_lookup<T>
     {
-        T::lookup(req, parent, name);
+        get(req)->lookup(req, parent, name);
     }
 
     static void
     ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires lowlevel_open_directory<T>
     {
-        T::opendir(req, ino, fi);
+        get(req)->opendir(req, ino, fi);
     }
 
     static void ll_readdir(
@@ -380,21 +387,21 @@ private:
       struct fuse_file_info* fi)
         requires lowlevel_read_directory<T>
     {
-        T::readdir(req, ino, size, off, fi);
+        get(req)->readdir(req, ino, size, off, fi);
     }
 
     static void
     ll_releasedir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires lowlevel_release_directory<T>
     {
-        T::releasedir(req, ino, fi);
+        get(req)->releasedir(req, ino, fi);
     }
 
     static void
     ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires lowlevel_open<T>
     {
-        T::open(req, ino, fi);
+        get(req)->open(req, ino, fi);
     }
 
     static void ll_write_buf(
@@ -405,7 +412,7 @@ private:
       struct fuse_file_info* fi)
         requires lowlevel_write_buffer<T>
     {
-        T::write_buf(req, ino, bufv, off, fi);
+        get(req)->write_buf(req, ino, bufv, off, fi);
     }
 
     static void ll_read(
@@ -416,20 +423,20 @@ private:
       struct fuse_file_info* fi)
         requires lowlevel_read<T>
     {
-        T::read(req, ino, size, off, fi);
+        get(req)->read(req, ino, size, off, fi);
     }
 
     static void
     ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char* name, mode_t mode)
         requires lowlevel_make_directory<T>
     {
-        T::mkdir(req, parent, name, mode);
+        get(req)->mkdir(req, parent, name, mode);
     }
 
     static void ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char* name)
         requires lowlevel_remove_directory<T>
     {
-        T::rmdir(req, parent, name);
+        get(req)->rmdir(req, parent, name);
     }
 
     static void ll_rename(
@@ -440,7 +447,7 @@ private:
       const char* newname)
         requires lowlevel_rename<T>
     {
-        T::rename(req, parent, name, newparent, newname);
+        get(req)->rename(req, parent, name, newparent, newname);
     }
 
     static void ll_setattr(
@@ -451,51 +458,51 @@ private:
       struct fuse_file_info* fi)
         requires lowlevel_set_attribute<T>
     {
-        T::setattr(req, ino, attr, to_set, fi);
+        get(req)->setattr(req, ino, attr, to_set, fi);
     }
 
     static void ll_readlink(fuse_req_t req, fuse_ino_t ino)
         requires lowlevel_read_symlink<T>
     {
-        T::readlink(req, ino);
+        get(req)->readlink(req, ino);
     }
 
     static void ll_symlink(
       fuse_req_t req, const char* link, fuse_ino_t parent, const char* name)
         requires lowlevel_make_symlink<T>
     {
-        T::symlink(req, link, parent, name);
+        get(req)->symlink(req, link, parent, name);
     }
 
     // TODO
     static void ll_fsync(
       fuse_req_t req, fuse_ino_t ino, int datasync, struct fuse_file_info* fi) {
-        T::fsync(req, ino, datasync, fi);
+        get(req)->fsync(req, ino, datasync, fi);
     }
 
     // TODO
     static void ll_fsyncdir(
       fuse_req_t req, fuse_ino_t ino, int datasync, struct fuse_file_info* fi) {
-        T::fsyncdir(req, ino, datasync, fi);
+        get(req)->fsyncdir(req, ino, datasync, fi);
     }
 
     static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
         requires lowlevel_stat_filesystem<T>
     {
-        T::statfs(req, ino);
+        get(req)->statfs(req, ino);
     }
 
     static void ll_link(
       fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent, const char* newname)
         requires lowlevel_make_hard_link<T>
     {
-        T::link(req, ino, newparent, newname);
+        get(req)->link(req, ino, newparent, newname);
     }
 
     static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
         requires lowlevel_access<T>
     {
-        T::access(req, ino, mask);
+        get(req)->access(req, ino, mask);
     }
 
     static void ll_mknod(
@@ -506,7 +513,7 @@ private:
       dev_t dev)
         requires lowlevel_make_node<T>
     {
-        T::mknod(req, parent, name, mode, dev);
+        get(req)->mknod(req, parent, name, mode, dev);
     }
 
     // TODO
@@ -517,9 +524,10 @@ private:
       off_t offset,
       off_t length,
       struct fuse_file_info* fi) {
-        T::fallocate(req, ino, mode, offset, length, fi);
+        get(req)->fallocate(req, ino, mode, offset, length, fi);
     }
 
+    T ll_;
     fuse_lowlevel_ops ops_{};
 };
 
