@@ -19,32 +19,76 @@ public:
     void destroy(void* userdata)
         requires destroy<T>;
 
-    void create(
-      fuse_req_t req,
-      fuse_ino_t parent,
-      const char* name,
-      mode_t mode,
-      struct fuse_file_info* fi)
-        requires create<T>;
-
-    void release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
-        requires release<T>;
-
-    void unlink(fuse_req_t req, fuse_ino_t parent, const char* name)
-        requires unlink<T>;
+    void lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
+        requires lookup<T>;
 
     void forget(fuse_req_t req, fuse_ino_t ino, long unsigned nlookup)
         requires forget<T>;
 
-    // TODO
-    void forget_multi(
-      fuse_req_t req, size_t count, struct fuse_forget_data* forgets);
-
     void getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires get_attribute<T>;
 
-    void lookup(fuse_req_t req, fuse_ino_t parent, const char* name)
-        requires lookup<T>;
+    void setattr(
+      fuse_req_t req,
+      fuse_ino_t ino,
+      struct stat* attr,
+      int to_set,
+      struct fuse_file_info* fi)
+        requires set_attribute<T>;
+
+    void readlink(fuse_req_t req, fuse_ino_t ino)
+        requires read_symlink<T>;
+
+    void mknod(
+      fuse_req_t req,
+      fuse_ino_t parent,
+      const char* name,
+      mode_t mode,
+      dev_t rdev)
+        requires make_node<T>;
+
+    void mkdir(fuse_req_t req, fuse_ino_t parent, const char* name, mode_t mode)
+        requires make_directory<T>;
+
+    void unlink(fuse_req_t req, fuse_ino_t parent, const char* name)
+        requires unlink<T>;
+
+    void rmdir(fuse_req_t req, fuse_ino_t parent, const char* name)
+        requires remove_directory<T>;
+
+    void symlink(
+      fuse_req_t req, const char* link, fuse_ino_t parent, const char* name)
+        requires make_symlink<T>;
+
+    void rename(
+      fuse_req_t req,
+      fuse_ino_t parent,
+      const char* name,
+      fuse_ino_t newparent,
+      const char* newname)
+        requires rename<T>;
+
+    void link(
+      fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent, const char* newname)
+        requires make_hard_link<T>;
+
+    void open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
+        requires open<T>;
+
+    void read(
+      fuse_req_t req,
+      fuse_ino_t ino,
+      size_t size,
+      off_t off,
+      struct fuse_file_info* fi)
+        requires read<T>;
+
+    void release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
+        requires release<T>;
+
+    // TODO
+    void fsync(
+      fuse_req_t req, fuse_ino_t ino, int datasync, struct fuse_file_info* fi);
 
     void opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires open_directory<T>;
@@ -60,8 +104,23 @@ public:
     void releasedir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
         requires release_directory<T>;
 
-    void open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi)
-        requires open<T>;
+    // TODO
+    void fsyncdir(
+      fuse_req_t req, fuse_ino_t ino, int datasync, struct fuse_file_info* fi);
+
+    void statfs(fuse_req_t req, fuse_ino_t ino)
+        requires stat_filesystem<T>;
+
+    void access(fuse_req_t req, fuse_ino_t ino, int mask)
+        requires access<T>;
+
+    void create(
+      fuse_req_t req,
+      fuse_ino_t parent,
+      const char* name,
+      mode_t mode,
+      struct fuse_file_info* fi)
+        requires create<T>;
 
     void write_buf(
       fuse_req_t req,
@@ -71,68 +130,9 @@ public:
       struct fuse_file_info* fi)
         requires write_buffer<T>;
 
-    void read(
-      fuse_req_t req,
-      fuse_ino_t ino,
-      size_t size,
-      off_t off,
-      struct fuse_file_info* fi)
-        requires read<T>;
-
-    void mkdir(fuse_req_t req, fuse_ino_t parent, const char* name, mode_t mode)
-        requires make_directory<T>;
-
-    void rmdir(fuse_req_t req, fuse_ino_t parent, const char* name)
-        requires remove_directory<T>;
-
-    void rename(
-      fuse_req_t req,
-      fuse_ino_t parent,
-      const char* name,
-      fuse_ino_t newparent,
-      const char* newname)
-        requires rename<T>;
-
-    void setattr(
-      fuse_req_t req,
-      fuse_ino_t ino,
-      struct stat* attr,
-      int to_set,
-      struct fuse_file_info* fi)
-        requires set_attribute<T>;
-
-    void readlink(fuse_req_t req, fuse_ino_t ino)
-        requires read_symlink<T>;
-
-    void symlink(
-      fuse_req_t req, const char* link, fuse_ino_t parent, const char* name)
-        requires make_symlink<T>;
-
     // TODO
-    void fsync(
-      fuse_req_t req, fuse_ino_t ino, int datasync, struct fuse_file_info* fi);
-
-    // TODO
-    void fsyncdir(
-      fuse_req_t req, fuse_ino_t ino, int datasync, struct fuse_file_info* fi);
-
-    void statfs(fuse_req_t req, fuse_ino_t ino)
-        requires stat_filesystem<T>;
-
-    void link(
-      fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent, const char* newname)
-        requires make_hard_link<T>;
-
-    void access(fuse_req_t req, fuse_ino_t ino, int mask)
-        requires access<T>;
-
-    void mknod(
-      fuse_req_t req,
-      fuse_ino_t parent,
-      const char* name,
-      mode_t mode,
-      dev_t rdev)
-        requires make_node<T>;
+    void forget_multi(
+      fuse_req_t req, size_t count, struct fuse_forget_data* forgets);
 
     // TODO
     void fallocate(
