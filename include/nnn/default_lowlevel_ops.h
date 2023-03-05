@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "filesystem.h"
+#include "lowlevel_ops.h"
 
 namespace foo {
 

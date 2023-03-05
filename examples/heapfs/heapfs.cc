@@ -1681,8 +1681,8 @@ int main(int argc, char* argv[]) {
     struct fuse_chan* ch;
     int err = -1;
 
-    foo::lowlevel_ops<foo::default_lowlevel_ops<FileSystem>> fs(
-      opts.size, console);
+    foo::default_lowlevel_ops<FileSystem> fs(opts.size, console);
+    foo::lowlevel_ops ll(fs);
 
     char* mountpoint = nullptr;
     if (
@@ -1691,7 +1691,7 @@ int main(int argc, char* argv[]) {
         struct fuse_session* se;
 
         se = fuse_lowlevel_new(
-          &args, &fs.ops(), sizeof(fs.ops()), &fs.userdata());
+          &args, &ll.ops(), sizeof(ll.ops()), ll.userdata());
         if (se != NULL) {
             if (fuse_set_signal_handlers(se) != -1) {
                 fuse_session_add_chan(se, ch);

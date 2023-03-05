@@ -232,9 +232,8 @@ concept lowlevel_write_buffer = requires(T t) {
 template<typename T>
 class lowlevel_ops {
 public:
-    template<typename... Args>
-    lowlevel_ops(Args&&... args)
-      : ll_(std::forward<Args>(args)...) {
+    lowlevel_ops(T& ll)
+      : ll_(ll) {
         if constexpr (lowlevel_destroy<T>) {
             ops_.destroy = ll_destroy;
         }
@@ -311,10 +310,10 @@ public:
     }
 
     const fuse_lowlevel_ops& ops() const { return ops_; }
-    T& userdata() { return ll_; }
+    void* userdata() { return &ll_; }
 
 private:
-    static T* get(void* userdata) { return reinterpret_cast<T*>(userdata); }
+    static T* get(void* userdata) { return static_cast<T*>(userdata); }
     static T* get(fuse_req_t req) { return get(fuse_req_userdata(req)); }
 
     static void ll_destroy(void* userdata)
@@ -527,7 +526,7 @@ private:
         get(req)->fallocate(req, ino, mode, offset, length, fi);
     }
 
-    T ll_;
+    T& ll_;
     fuse_lowlevel_ops ops_{};
 };
 
