@@ -9,6 +9,8 @@
 
 namespace foo {
 
+// TODO pass fuse_ctx directly to fs to simplify stuff
+
 template<typename T>
 class default_lowlevel_ops {
 public:
